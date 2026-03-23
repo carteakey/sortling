@@ -9,10 +9,11 @@ Current scope: PDF organization with content extraction, optional first-page vis
 - Content-aware PDF classification (not filename-only)
 - Optional vision snapshot (`--vision-mode auto|always|off`)
 - Exact duplicate detection + handling
-- Progress bars across pipeline stages
+- Enhanced progress bars with visual feedback
 - Resilient fallback behavior when LLM/tools are unavailable
 - Dry-run logs (`CSV` + `JSON`)
 - Enhanced metadata tracking (file size, timestamps, page count)
+- Quick filename-based processing guard to avoid expensive operations
 
 ## Quick start
 

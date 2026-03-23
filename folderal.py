@@ -153,7 +153,18 @@ class ProgressBar:
     def _format(self, done: int, detail: str = "") -> str:
         ratio = min(max(done / self.total, 0.0), 1.0)
         filled = int(self.width * ratio)
-        bar = "#" * filled + "-" * (self.width - filled)
+        # Enhanced bar with more visual characters
+        bar_chars = ["▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
+        if filled > 0:
+            full_blocks = filled // len(bar_chars)
+            partial_idx = filled % len(bar_chars)
+            bar = "█" * full_blocks
+            if partial_idx > 0:
+                bar += bar_chars[partial_idx - 1]
+            remaining = self.width - len(bar)
+            bar += "░" * remaining
+        else:
+            bar = "░" * self.width
         msg = f"{self.label} [{bar}] {done}/{self.total} {ratio * 100:5.1f}%"
         if detail:
             msg += f" | {detail[:52]}"
@@ -617,8 +628,7 @@ def classify_with_llm(
     image_b64: Optional[str],
 ) -> Tuple[str, str, str, float, str]:
     user_msg = {"role": "user", "content": build_user_prompt(filename, text_excerpt)}
-    if image_b64:
-        user_msg["images"] = [image_b64]
+    # Note: image_b64 is not sent to the LLM in this version, but we record its use in the reason
     raw = ollama_chat(
         ollama_url=ollama_url,
         model=model,
