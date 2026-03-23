@@ -667,6 +667,89 @@ def fallback_classify(
     return ("unknown", "review", "90_Review", 0.35, "fallback:uncertain")
 
 
+def quick_filename_check(filename: str) -> Tuple[str, str, str, float, str]:
+    """
+    Quick filename-based classification to avoid expensive processing
+    Returns: (category, decision, folder, confidence, reason)
+    """
+    filename_lower = filename.lower()
+
+    # Obvious spam/junk - high confidence
+    if any(
+        indicator in filename_lower
+        for indicator in ["spam", "promo", "unsubscribe", "advertisement"]
+    ):
+        return ("spam", "delete_candidate", "98_Delete", 0.9, "filename:spam-indicator")
+
+    # Obvious personal/identity documents
+    if any(
+        indicator in filename_lower
+        for indicator in [
+            "passport",
+            "visa",
+            "birth certificate",
+            "marriage certificate",
+            "social security",
+        ]
+    ):
+        return ("personal", "keep", "10_Personal_Keep", 0.85, "filename:identity-doc")
+
+    # Obvious financial documents
+    if any(
+        indicator in filename_lower
+        for indicator in ["invoice", "statement", "receipt", "tax", "bill", "payment"]
+    ):
+        return ("finance", "keep", "20_Finance_Keep", 0.8, "filename:financial-doc")
+
+    # Obvious work documents
+    if any(
+        indicator in filename_lower
+        for indicator in ["resume", "cv", "contract", "agreement", "proposal", "report"]
+    ):
+        # Check if it's more likely personal resume vs work report
+        if any(pers in filename_lower for pers in ["resume", "cv"]):
+            return ("personal", "keep", "10_Personal_Keep", 0.75, "filename:resume")
+        else:
+            return ("work", "archive", "30_Work_Archive", 0.75, "filename:work-doc")
+
+    # Obvious medical documents
+    if any(
+        indicator in filename_lower
+        for indicator in [
+            "prescription",
+            "medical",
+            "health",
+            "hospital",
+            "clinic",
+            "doctor",
+        ]
+    ):
+        return ("medical", "keep", "10_Personal_Keep", 0.8, "filename:medical-doc")
+
+    # Obvious learning documents
+    if any(
+        indicator in filename_lower
+        for indicator in [
+            "lecture",
+            "notes",
+            "homework",
+            "assignment",
+            "syllabus",
+            "textbook",
+        ]
+    ):
+        return (
+            "learning",
+            "archive",
+            "41_Learning_Archive",
+            0.75,
+            "filename:learning-doc",
+        )
+
+    # Low confidence - return unknown to proceed with normal processing
+    return ("unknown", "review", "90_Review", 0.3, "filename:no-clear-indicators")
+
+
 def ensure_target_dirs(root: Path) -> None:
     for folder in TARGET_FOLDERS:
         (root / folder).mkdir(parents=True, exist_ok=True)
@@ -983,27 +1066,48 @@ def main() -> int:
             str(duplicate_of[path].relative_to(root)) if path in duplicate_of else ""
         )
 
-        text_excerpt, extractor = extract_text_from_pdf(
-            path=path, max_pages=args.max_pages, max_chars=args.max_chars
+        # Guard clause: quick filename-based checks to avoid expensive processing
+        quick_category, quick_decision, quick_folder, quick_confidence, quick_reason = (
+            quick_filename_check(path.name)
         )
-        text_chars = len(text_excerpt)
-        use_vision = args.vision_mode == "always" or (
-            args.vision_mode == "auto" and text_chars < args.vision_min_text_chars
-        )
-
-        image_b64: Optional[str] = None
-        vision_source = ""
-        if use_vision:
-            image_b64, vision_source = render_first_page_png_base64(path)
-            if image_b64 is None and args.vision_mode == "always":
-                extractor = f"{extractor};{vision_source}"
-
-        if llm_enabled:
-            llm_status = (
-                llm_global_status
-                if llm_global_status.startswith("model-fallback:")
-                else "llm"
+        if quick_confidence > 0.8:  # High confidence quick check
+            text_excerpt = ""  # Skip text extraction
+            extractor = "quick-filename-check"
+            text_chars = 0
+            use_vision = False
+            image_b64 = None
+            vision_source = ""
+            llm_status = f"quick-{quick_reason}"
+            category, decision, folder, confidence, reason = (
+                quick_category,
+                quick_decision,
+                quick_folder,
+                quick_confidence,
+                quick_reason,
             )
+        else:
+            # Proceed with normal processing
+            text_excerpt, extractor = extract_text_from_pdf(
+                path=path, max_pages=args.max_pages, max_chars=args.max_chars
+            )
+            text_chars = len(text_excerpt)
+            use_vision = args.vision_mode == "always" or (
+                args.vision_mode == "auto" and text_chars < args.vision_min_text_chars
+            )
+
+            image_b64: Optional[str] = None
+            vision_source = ""
+            if use_vision:
+                image_b64, vision_source = render_first_page_png_base64(path)
+                if image_b64 is None and args.vision_mode == "always":
+                    extractor = f"{extractor};{vision_source}"
+
+            if llm_enabled:
+                llm_status = (
+                    llm_global_status
+                    if llm_global_status.startswith("model-fallback:")
+                    else "llm"
+                )
             llm_exc: Optional[Exception] = None
             for attempt in range(retry_timeouts + 1):
                 try:
@@ -1043,48 +1147,42 @@ def main() -> int:
                     text_excerpt=text_excerpt,
                 )
                 reason = f"{reason} | llm_error:{llm_exc}"
-        else:
-            llm_status = llm_global_status
-            category, decision, folder, confidence, reason = fallback_classify(
-                filename=path.name,
-                text_excerpt=text_excerpt,
+            else:
+                llm_status = llm_global_status
+                category, decision, folder, confidence, reason = fallback_classify(
+                    filename=path.name,
+                    text_excerpt=text_excerpt,
+                )
+                if vision_source:
+                    reason = f"{reason} | vision:{vision_source}"
+
+            rec = DocRecord(
+                file=path.name,
+                source_relpath=rel,
+                sha1=digest,
+                duplicate_of=dup_primary,
+                extractor=extractor,
+                text_chars=text_chars,
+                used_vision=image_b64 is not None,
+                llm_status=llm_status,
+                standardized_category=category,
+                keep_decision=decision,
+                target_folder=folder,
+                confidence=confidence,
+                reason=reason[:220],
+                action="",
+                file_size=path.stat().st_size,
+                page_count=0,  # TODO: Extract actual page count if needed
+                modified_time=datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                created_time=datetime.fromtimestamp(path.stat().st_ctime).isoformat(),
             )
-            if vision_source:
-                reason = f"{reason} | vision:{vision_source}"
-
-        # Get file metadata
-        stat = path.stat()
-        file_size = stat.st_size
-        modified_time = datetime.fromtimestamp(stat.st_mtime).isoformat()
-        created_time = datetime.fromtimestamp(stat.st_ctime).isoformat()
-
-        rec = DocRecord(
-            file=path.name,
-            source_relpath=rel,
-            sha1=digest,
-            duplicate_of=dup_primary,
-            extractor=extractor,
-            text_chars=text_chars,
-            used_vision=image_b64 is not None,
-            llm_status=llm_status,
-            standardized_category=category,
-            keep_decision=decision,
-            target_folder=folder,
-            confidence=confidence,
-            reason=reason[:220],
-            action="",
-            file_size=file_size,
-            page_count=0,  # TODO: Extract actual page count if needed
-            modified_time=modified_time,
-            created_time=created_time,
-        )
-        assign_action(
-            record=rec,
-            delete_exact_duplicates=args.delete_exact_duplicates,
-            hard_delete_delete_candidates=args.hard_delete_delete_candidates,
-        )
-        records.append(rec)
-        classify_progress.update(idx, f"{path.name} -> {rec.target_folder}")
+            assign_action(
+                record=rec,
+                delete_exact_duplicates=args.delete_exact_duplicates,
+                hard_delete_delete_candidates=args.hard_delete_delete_candidates,
+            )
+            records.append(rec)
+            classify_progress.update(idx, f"{path.name} -> {rec.target_folder}")
     classify_progress.finish("classification complete")
 
     if args.apply:
