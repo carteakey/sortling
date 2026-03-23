@@ -12,6 +12,7 @@ Current scope: PDF organization with content extraction, optional first-page vis
 - Progress bars across pipeline stages
 - Resilient fallback behavior when LLM/tools are unavailable
 - Dry-run logs (`CSV` + `JSON`)
+- Enhanced metadata tracking (file size, timestamps, page count)
 
 ## Quick start
 
