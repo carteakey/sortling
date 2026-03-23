@@ -121,6 +121,11 @@ class DocRecord:
     action: str
     result: str = ""
     error: str = ""
+    # Enhanced metadata fields
+    file_size: int = 0
+    page_count: int = 0
+    modified_time: str = ""
+    created_time: str = ""
 
 
 class ProgressBar:
@@ -246,11 +251,15 @@ def all_pdfs_for_duplicate_scan(root: Path) -> List[Path]:
     return sorted(p for p in root.rglob("*.pdf") if p.is_file())
 
 
-def file_penalty(path: Path, source_set: set[Path], root: Path) -> Tuple[int, int, int, int, str]:
+def file_penalty(
+    path: Path, source_set: set[Path], root: Path
+) -> Tuple[int, int, int, int, str]:
     rel = str(path.relative_to(root))
     n = path.name.lower()
     in_source = 1 if path in source_set else 0
-    in_deleteish = 1 if rel.startswith("98_Delete/") or rel.startswith("99_Duplicates/") else 0
+    in_deleteish = (
+        1 if rel.startswith("98_Delete/") or rel.startswith("99_Duplicates/") else 0
+    )
     copyish = 1 if (" copy" in n or re.search(r"\(\d+\)\.pdf$", n) is not None) else 0
     numericish = 1 if re.match(r"^\d{7,}", n) else 0
     return (in_source, in_deleteish, copyish + numericish, len(n), n)
@@ -288,7 +297,9 @@ def build_duplicate_lookup(
     return duplicate_of
 
 
-def extract_text_from_pdf(path: Path, max_pages: int, max_chars: int) -> Tuple[str, str]:
+def extract_text_from_pdf(
+    path: Path, max_pages: int, max_chars: int
+) -> Tuple[str, str]:
     errors: List[str] = []
 
     try:
@@ -362,7 +373,9 @@ def extract_text_from_pdf(path: Path, max_pages: int, max_chars: int) -> Tuple[s
     return "", ";".join(errors)
 
 
-def render_first_page_png_base64(path: Path, max_dim: int = 1100) -> Tuple[Optional[str], str]:
+def render_first_page_png_base64(
+    path: Path, max_dim: int = 1100
+) -> Tuple[Optional[str], str]:
     try:
         import fitz  # type: ignore
 
@@ -521,7 +534,9 @@ def extract_json_object(text: str) -> dict:
     text = text.strip()
     if text.startswith("{") and text.endswith("}"):
         return json.loads(text)
-    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL | re.IGNORECASE)
+    fenced = re.search(
+        r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL | re.IGNORECASE
+    )
     if fenced:
         return json.loads(fenced.group(1))
     start = text.find("{")
@@ -551,17 +566,23 @@ def extract_json_object(text: str) -> dict:
 
 
 def normalize_category(value: str) -> str:
-    v = CATEGORY_ALIASES.get((value or "").strip().lower(), (value or "").strip().lower())
+    v = CATEGORY_ALIASES.get(
+        (value or "").strip().lower(), (value or "").strip().lower()
+    )
     return v if v in STANDARDIZED_CATEGORIES else "unknown"
 
 
 def normalize_decision(value: str) -> str:
-    v = DECISION_ALIASES.get((value or "").strip().lower(), (value or "").strip().lower())
+    v = DECISION_ALIASES.get(
+        (value or "").strip().lower(), (value or "").strip().lower()
+    )
     return v if v in KEEP_DECISIONS else "review"
 
 
 def resolve_target_folder(category: str, decision: str, folder_hint: str) -> str:
-    hint = FOLDER_ALIASES.get((folder_hint or "").strip().lower(), (folder_hint or "").strip())
+    hint = FOLDER_ALIASES.get(
+        (folder_hint or "").strip().lower(), (folder_hint or "").strip()
+    )
     if hint in TARGET_FOLDERS:
         return hint
     if decision == "delete_candidate":
@@ -581,7 +602,7 @@ def resolve_target_folder(category: str, decision: str, folder_hint: str) -> str
 
 def to_float_0_1(value: object) -> float:
     try:
-        f = float(value)
+        f = float(value)  # type: ignore
     except (TypeError, ValueError):
         return 0.0
     return 0.0 if f < 0.0 else 1.0 if f > 1.0 else f
@@ -607,13 +628,17 @@ def classify_with_llm(
     parsed = extract_json_object(raw)
     category = normalize_category(str(parsed.get("standardized_category", "")))
     decision = normalize_decision(str(parsed.get("keep_decision", "")))
-    folder = resolve_target_folder(category, decision, str(parsed.get("target_folder", "")))
+    folder = resolve_target_folder(
+        category, decision, str(parsed.get("target_folder", ""))
+    )
     confidence = to_float_0_1(parsed.get("confidence"))
     reason = str(parsed.get("reason", "")).strip()[:200] or "llm-classification"
     return category, decision, folder, confidence, reason
 
 
-def fallback_classify(filename: str, text_excerpt: str) -> Tuple[str, str, str, float, str]:
+def fallback_classify(
+    filename: str, text_excerpt: str
+) -> Tuple[str, str, str, float, str]:
     hay = f"{filename} {text_excerpt}".lower()
 
     def has(*tokens: str) -> bool:
@@ -623,7 +648,9 @@ def fallback_classify(filename: str, text_excerpt: str) -> Tuple[str, str, str, 
         return ("spam", "delete_candidate", "98_Delete", 0.65, "keyword:spam")
     if has("study permit", "passport", "oci", "visa", "pr card"):
         return ("personal", "keep", "10_Personal_Keep", 0.78, "keyword:identity")
-    if has("invoice", "statement", "receipt", "tangerine", "cibc", "tax", "w8", "payment"):
+    if has(
+        "invoice", "statement", "receipt", "tangerine", "cibc", "tax", "w8", "payment"
+    ):
         return ("finance", "keep", "20_Finance_Keep", 0.73, "keyword:finance")
     if has("resume", "employment", "offer letter", "reference check", "certificate"):
         return ("personal", "keep", "10_Personal_Keep", 0.74, "keyword:personal")
@@ -631,7 +658,9 @@ def fallback_classify(filename: str, text_excerpt: str) -> Tuple[str, str, str, 
         return ("medical", "keep", "10_Personal_Keep", 0.75, "keyword:medical")
     if has("oracle", "supply chain", "ebs", "oaf", "doc id", "plsql"):
         return ("work", "archive", "30_Work_Archive", 0.72, "keyword:work")
-    if has("lecture", "cheat sheet", "numpy", "pandas", "machine learning", "deep learning"):
+    if has(
+        "lecture", "cheat sheet", "numpy", "pandas", "machine learning", "deep learning"
+    ):
         return ("learning", "archive", "41_Learning_Archive", 0.71, "keyword:learning")
     if has("flight", "booking", "ticket", "map", "transit"):
         return ("travel", "review", "90_Review", 0.61, "keyword:travel")
@@ -693,30 +722,40 @@ def timestamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def write_logs(output_dir: Path, records: Sequence[DocRecord], dry_run: bool) -> Tuple[Path, Path]:
+def write_logs(
+    output_dir: Path, records: Sequence[DocRecord], dry_run: bool
+) -> Tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = timestamp()
     csv_path = output_dir / f"pdf_ai_manifest_{stamp}.csv"
     json_path = output_dir / f"pdf_ai_manifest_{stamp}.json"
-    fieldnames = list(asdict(records[0]).keys()) if records else list(
-        asdict(
-            DocRecord(
-                file="",
-                source_relpath="",
-                sha1="",
-                duplicate_of="",
-                extractor="",
-                text_chars=0,
-                used_vision=False,
-                llm_status="",
-                standardized_category="",
-                keep_decision="",
-                target_folder="",
-                confidence=0.0,
-                reason="",
-                action="",
-            )
-        ).keys()
+    fieldnames = (
+        list(asdict(records[0]).keys())
+        if records
+        else list(
+            asdict(
+                DocRecord(
+                    file="",
+                    source_relpath="",
+                    sha1="",
+                    duplicate_of="",
+                    extractor="",
+                    text_chars=0,
+                    used_vision=False,
+                    llm_status="",
+                    standardized_category="",
+                    keep_decision="",
+                    target_folder="",
+                    confidence=0.0,
+                    reason="",
+                    action="",
+                    file_size=0,
+                    page_count=0,
+                    modified_time="",
+                    created_time="",
+                )
+            ).keys()
+        )
     )
     with csv_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -733,17 +772,29 @@ def write_logs(output_dir: Path, records: Sequence[DocRecord], dry_run: bool) ->
     return csv_path, json_path
 
 
-def maybe_write_review_note(root: Path, records: Sequence[DocRecord], apply: bool) -> Optional[Path]:
+def maybe_write_review_note(
+    root: Path, records: Sequence[DocRecord], apply: bool
+) -> Optional[Path]:
     review_dir = root / "90_Review"
     review_dir.mkdir(parents=True, exist_ok=True)
     note = review_dir / "REVIEW_LIST.txt"
     if apply:
         files = sorted(p.name for p in review_dir.glob("*.pdf"))
-        lines = ["Manual review list (current snapshot)", f"Total files in 90_Review: {len(files)}", ""]
+        lines = [
+            "Manual review list (current snapshot)",
+            f"Total files in 90_Review: {len(files)}",
+            "",
+        ]
         lines.extend(f"- {name}" for name in files)
     else:
-        candidates = sorted(rec.file for rec in records if rec.target_folder == "90_Review")
-        lines = ["Manual review list (dry-run projection)", f"Would route to 90_Review: {len(candidates)}", ""]
+        candidates = sorted(
+            rec.file for rec in records if rec.target_folder == "90_Review"
+        )
+        lines = [
+            "Manual review list (dry-run projection)",
+            f"Would route to 90_Review: {len(candidates)}",
+            "",
+        ]
         lines.extend(f"- {name}" for name in candidates)
     with note.open("w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -771,23 +822,53 @@ def summarize(records: Sequence[DocRecord]) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Folderal: AI PDF organizer with Ollama + optional vision")
-    p.add_argument("--root", default=".", help="Root directory containing PDFs and target folders")
-    p.add_argument("--apply", action="store_true", help="Apply moves/deletes. Default is dry-run")
-    p.add_argument("--recursive-source", action="store_true", help="Process PDFs recursively outside target folders")
-    p.add_argument("--delete-exact-duplicates", action="store_true", help="Delete exact duplicate copies")
+    p = argparse.ArgumentParser(
+        description="Folderal: AI PDF organizer with Ollama + optional vision"
+    )
+    p.add_argument(
+        "--root", default=".", help="Root directory containing PDFs and target folders"
+    )
+    p.add_argument(
+        "--apply", action="store_true", help="Apply moves/deletes. Default is dry-run"
+    )
+    p.add_argument(
+        "--recursive-source",
+        action="store_true",
+        help="Process PDFs recursively outside target folders",
+    )
+    p.add_argument(
+        "--delete-exact-duplicates",
+        action="store_true",
+        help="Delete exact duplicate copies",
+    )
     p.add_argument(
         "--hard-delete-delete-candidates",
         action="store_true",
         help="Hard-delete delete_candidate files instead of moving to 98_Delete",
     )
-    p.add_argument("--ollama-url", default="http://localhost:11434", help="Ollama base URL")
+    p.add_argument(
+        "--ollama-url", default="http://localhost:11434", help="Ollama base URL"
+    )
     p.add_argument("--model", default="qwen2.5:14b", help="Ollama model name")
-    p.add_argument("--disable-llm", action="store_true", help="Skip Ollama and use local fallback classifier")
-    p.add_argument("--strict-model", action="store_true", help="Do not auto-switch model when unavailable")
-    p.add_argument("--timeout-s", type=int, default=120, help="Ollama request timeout (seconds)")
-    p.add_argument("--max-pages", type=int, default=3, help="Max PDF pages for text extraction")
-    p.add_argument("--max-chars", type=int, default=7000, help="Max text chars sent to model")
+    p.add_argument(
+        "--disable-llm",
+        action="store_true",
+        help="Skip Ollama and use local fallback classifier",
+    )
+    p.add_argument(
+        "--strict-model",
+        action="store_true",
+        help="Do not auto-switch model when unavailable",
+    )
+    p.add_argument(
+        "--timeout-s", type=int, default=120, help="Ollama request timeout (seconds)"
+    )
+    p.add_argument(
+        "--max-pages", type=int, default=3, help="Max PDF pages for text extraction"
+    )
+    p.add_argument(
+        "--max-chars", type=int, default=7000, help="Max text chars sent to model"
+    )
     p.add_argument(
         "--vision-mode",
         choices=("off", "auto", "always"),
@@ -800,9 +881,19 @@ def parse_args() -> argparse.Namespace:
         default=400,
         help="In auto mode, use vision when text chars are below this threshold",
     )
-    p.add_argument("--output-dir", default="_pdf_ai_logs", help="Directory for manifest outputs")
-    p.add_argument("--write-review-note", action="store_true", help="Update 90_Review/REVIEW_LIST.txt")
-    p.add_argument("--no-progress", action="store_true", help="Disable progress bars and stage logs")
+    p.add_argument(
+        "--output-dir", default="_pdf_ai_logs", help="Directory for manifest outputs"
+    )
+    p.add_argument(
+        "--write-review-note",
+        action="store_true",
+        help="Update 90_Review/REVIEW_LIST.txt",
+    )
+    p.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable progress bars and stage logs",
+    )
     p.add_argument("--progress-width", type=int, default=32, help="Progress bar width")
     p.add_argument(
         "--max-consecutive-timeouts",
@@ -888,7 +979,9 @@ def main() -> int:
     for idx, path in enumerate(source_files, start=1):
         rel = str(path.relative_to(root))
         digest = sha1_file(path)
-        dup_primary = str(duplicate_of[path].relative_to(root)) if path in duplicate_of else ""
+        dup_primary = (
+            str(duplicate_of[path].relative_to(root)) if path in duplicate_of else ""
+        )
 
         text_excerpt, extractor = extract_text_from_pdf(
             path=path, max_pages=args.max_pages, max_chars=args.max_chars
@@ -906,7 +999,11 @@ def main() -> int:
                 extractor = f"{extractor};{vision_source}"
 
         if llm_enabled:
-            llm_status = llm_global_status if llm_global_status.startswith("model-fallback:") else "llm"
+            llm_status = (
+                llm_global_status
+                if llm_global_status.startswith("model-fallback:")
+                else "llm"
+            )
             llm_exc: Optional[Exception] = None
             for attempt in range(retry_timeouts + 1):
                 try:
@@ -926,7 +1023,9 @@ def main() -> int:
                 except Exception as exc:
                     llm_exc = exc
                     if is_timeout_like_error(exc) and attempt < retry_timeouts:
-                        backoff = max(0.0, float(args.retry_backoff_sec)) * (attempt + 1)
+                        backoff = max(0.0, float(args.retry_backoff_sec)) * (
+                            attempt + 1
+                        )
                         if backoff > 0:
                             time.sleep(backoff)
                         continue
@@ -953,6 +1052,12 @@ def main() -> int:
             if vision_source:
                 reason = f"{reason} | vision:{vision_source}"
 
+        # Get file metadata
+        stat = path.stat()
+        file_size = stat.st_size
+        modified_time = datetime.fromtimestamp(stat.st_mtime).isoformat()
+        created_time = datetime.fromtimestamp(stat.st_ctime).isoformat()
+
         rec = DocRecord(
             file=path.name,
             source_relpath=rel,
@@ -968,6 +1073,10 @@ def main() -> int:
             confidence=confidence,
             reason=reason[:220],
             action="",
+            file_size=file_size,
+            page_count=0,  # TODO: Extract actual page count if needed
+            modified_time=modified_time,
+            created_time=created_time,
         )
         assign_action(
             record=rec,
@@ -1001,8 +1110,14 @@ def main() -> int:
             rec.result = "DRY_RUN"
 
     output_dir = (root / args.output_dir).resolve()
-    csv_path, json_path = write_logs(output_dir=output_dir, records=records, dry_run=not args.apply)
-    review_note = maybe_write_review_note(root=root, records=records, apply=args.apply) if args.write_review_note else None
+    csv_path, json_path = write_logs(
+        output_dir=output_dir, records=records, dry_run=not args.apply
+    )
+    review_note = (
+        maybe_write_review_note(root=root, records=records, apply=args.apply)
+        if args.write_review_note
+        else None
+    )
 
     mode = "APPLY" if args.apply else "DRY_RUN"
     print(f"MODE: {mode}")
