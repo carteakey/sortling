@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Pack assets/head-*.png into sortling.py's embedded face sprites.
+"""Pack assets/faces/head-*.png into sortling.py's embedded face sprites.
 
     python3 tools/encode_faces.py            # rewrite the FACES block in sortling.py
-    python3 tools/encode_faces.py --width 28 --check
+    python3 tools/encode_faces.py --width 34 --check
 
 Needs ImageMagick to read the PNGs. Each head is point-sampled to --width pixels (so pixel
 art stays crisp), alpha is cut at 50%, colors go into one shared palette, and everything
@@ -21,7 +21,8 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-NAMES = ("smile", "happy", "surprised", "confused", "nerd", "wink", "love", "sleepy")
+NAMES = ("smile", "happy", "surprised", "confused", "nerd", "content", "love", "sleepy",
+         "dizzy", "sad", "angry", "cool", "searching", "crying", "starstruck", "wink")
 
 
 IM = shutil.which("magick") or shutil.which("convert")
@@ -47,14 +48,14 @@ def rgba(path: Path, width: int, palette_png: Path):
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--width", type=int, default=28)
+    p.add_argument("--width", type=int, default=34)
     p.add_argument("--colors", type=int, default=64)
     p.add_argument("--check", action="store_true", help="print sizes, don't write")
     args = p.parse_args()
 
     if not IM:
         sys.exit("error: ImageMagick is required")
-    paths = [ROOT / "assets" / f"head-{name}.png" for name in NAMES]
+    paths = [ROOT / "assets" / "faces" / f"head-{name}.png" for name in NAMES]
     tmp = Path(tempfile.mkdtemp(prefix="sortling-faces-")) / "palette.png"
     shared_palette(paths, args.width, args.colors, tmp)
     palette, index, frames, dims = [], {}, {}, None

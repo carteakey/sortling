@@ -1,6 +1,6 @@
 # sortling
 
-<p align="center"><img src="assets/wizard.png" alt="sortling, a small pixel-art wizard with a star-topped hat and a wand" width="220"></p>
+<p align="center"><img src="assets/poses/sortling_idle.png" alt="sortling, a small pixel-art wizard with a star-topped hat, raising a sparkling wand" width="240"></p>
 
 ```
                    _    _  _
@@ -36,9 +36,12 @@ While it works, the wizard's head sits next to the progress bar and reacts to ea
 file, Doom-guy style:
 
 - **Happy** at an easy one, **confused** when unsure, **surprised** at junk.
-- **Wink** for memes, **heart eyes** for pets, **glasses** for a duplicate.
-- **Sleepy** while a model loads.
-- **Between files** it glances around and blinks.
+- **Sunglasses** for memes, **heart eyes** for pets, **glasses** for a duplicate.
+- **A magnifier** for a receipt or ticket photo filed as a document.
+- **Sleepy** while a model loads, **dizzy** when there's no model, **sad** when the model
+  stops answering.
+- **Star-eyed** when everything's sorted.
+- **Between files** it glances around, blinks, and peers at the paperwork.
 
 It needs a UTF-8 terminal at least 72×18 (truecolor if available, 256 colors otherwise).
 Turn it off with `--no-face` or `SORTLING_FACE=0`.
@@ -63,6 +66,8 @@ box swaps models once. Use the `hybrid-local` backend, or add `--second-pass <ba
 to any run. Each record's `second_pass` field shows what changed.
 
 ## Profiles
+
+<p align="center"><img src="assets/poses/sortling_sorting.png" alt="the wizard dropping colored cubes into document, image and leaf bins" width="360"></p>
 
 ### `default`
 
@@ -197,9 +202,23 @@ Expected folders are in `tests/expected.json`.
 
 ## Art
 
-The pixel wizard is in [`assets/`](assets/): poses (`wizard`, `wizard-reading`,
-`wizard-carrying`, `wizard-sleeping`, `wizard-bins`…), expression heads (`head-*.png`)
-and the full `character-sheet.png`. These are placeholder crops from the sheet; cleaner
-per-sprite art is coming. The terminal face is packed into `sortling.py` from the
-`head-*.png` files by `python3 tools/encode_faces.py` (needs ImageMagick); re-run it after
-replacing the heads.
+The pixel wizard lives in [`assets/`](assets/):
+
+- **`poses/`:** `sortling_idle`, `sortling_thinking`, `sortling_sorting`, `sortling_moving`,
+  `sortling_sleeping`, `sortling_overwhelmed`, `sortling_success`, `sortling_deleting`,
+  `sortling_clearing`.
+- **`faces/`:** 16 expression heads: smile, happy, surprised, confused, nerd, content,
+  love, sleepy, dizzy, sad, angry, cool, searching, crying, starstruck, wink.
+- **`character-sheet.png`:** the original concept sheet.
+
+<p align="center">
+  <img src="assets/poses/sortling_thinking.png" alt="the wizard reading a scroll, puzzled" width="150">
+  <img src="assets/poses/sortling_moving.png" alt="the wizard carrying a stack of colored crates" width="150">
+  <img src="assets/poses/sortling_sleeping.png" alt="the wizard asleep against a pile of boxes" width="190">
+  <img src="assets/poses/sortling_success.png" alt="the wizard cheering beside a folder with a check mark" width="190">
+</p>
+
+The terminal face is packed into `sortling.py` from `assets/faces/head-*.png` by
+`python3 tools/encode_faces.py` (needs ImageMagick; 34×28 px, about 10 KB). Re-run it
+after changing the heads; `SORTLING_FACE=force` draws the face even without a terminal,
+for checking.
