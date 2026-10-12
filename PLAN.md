@@ -1,7 +1,7 @@
 # sortling plan
 
 Working plan for sortling across sessions. Update it as items land. Last updated
-2026-10-12 (v0.2.0, uncommitted at the time).
+2026-10-12 (v0.2.0 released to `main`).
 
 ## Where things stand
 
@@ -49,13 +49,14 @@ second-look band), and "woman in a canoe" flips between `people` and `places`.
 
 ## Next up (in order)
 
-### 1. Commit and rename
+### 1. Commit and rename (done 2026-10-12, except the wrapper)
 
-- Commit v0.2.0 as one change ("folderal → sortling 0.2.0").
-- Rename the GitHub repo `carteakey/folderal` → `carteakey/sortling` (the README's
-  `curl` line already points there), then the local folder `~/repos/folderal`.
-- The old Mac wrapper `paperless-init/PDFs/pdf_ai_organizer.py` calls `folderal.py`
-  with removed flags (`--ollama-url`, `--model`); update or retire it.
+- [x] v0.2.0 committed (`3df1081`) and pushed to `main`.
+- [x] GitHub repo renamed `carteakey/folderal` → `carteakey/sortling` (old URL
+  redirects); description updated; the README `curl` one-liner verified.
+- [x] Local folder renamed to `~/repos/sortling`.
+- [ ] The old Mac wrapper `paperless-init/PDFs/pdf_ai_organizer.py` calls `folderal.py`
+  with removed flags (`--ollama-url`, `--model`); update or retire it (on the Mac).
 
 ### 2. Keep the test sets
 
