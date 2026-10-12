@@ -93,4 +93,26 @@ if [ ! -d "$P" ]; then
   cp "$D/Screenshot from 2026-10-08 14-22-07.png" "$P/Screenshot_20261010.png"
   echo "built $P"
 fi
+# --- charts: a bar chart, a paper-style line figure and a cheat sheet; none of them memes --------
+C="$OUT/charts"
+if [ ! -d "$C" ]; then
+  mkdir -p "$C"
+  "$IM" -size 900x600 xc:white -font "$BOLD" -fill black -pointsize 30 -annotate +40+55 'GPU memory bandwidth by generation (TB/s)' \
+    -font "$SANS" -pointsize 20 -fill '#555555' -draw 'line 80,520 860,520' -draw 'line 80,100 80,520' \
+    -fill '#4c78a8' -draw 'rectangle 130,420 230,520' -draw 'rectangle 300,340 400,520' \
+    -draw 'rectangle 470,250 570,520' -draw 'rectangle 640,140 740,520' \
+    -fill black -annotate +150+550 'A100' -annotate +320+550 'H100' -annotate +490+550 'H200' -annotate +660+550 'B200' \
+    -annotate +165+410 '2.0' -annotate +335+330 '3.4' -annotate +505+240 '4.8' -annotate +675+130 '8.0' \
+    -fill '#777777' -pointsize 16 -annotate +40+590 'Source: vendor datasheets' "$C/bandwidth_chart.png"
+  "$IM" -size 800x560 xc:white -font "$SANS" -fill black -pointsize 22 -annotate +300+40 'Figure 3. Validation loss' \
+    -stroke black -draw 'line 90,480 760,480' -draw 'line 90,80 90,480' -stroke none \
+    -pointsize 16 -annotate +380+520 'training steps (k)' -annotate +100+505 '0' -annotate +410+505 '50' -annotate +730+505 '100' \
+    -fill none -stroke '#d62728' -strokewidth 3 -draw 'path "M 95,110 C 200,330 350,400 750,430"' \
+    -stroke '#1f77b4' -draw 'stroke-dasharray 10 6 path "M 95,130 C 220,380 400,440 750,455"' -stroke none \
+    -fill black -pointsize 16 -annotate +560+150 '— baseline' -annotate +560+175 '- - ours' "$C/fig3.png"
+  "$IM" -size 900x700 xc:'#fdfdf6' -font "$BOLD" -fill '#222222' -pointsize 34 -annotate +40+60 'GIT CHEAT SHEET' \
+    -font "$MONO" -pointsize 19 -annotate +40+120 $'git status            show changed files\ngit add -p            stage hunks interactively\ngit commit --amend    rewrite the last commit\ngit rebase -i HEAD~3  edit the last 3 commits\ngit stash push -m x   shelve work in progress\ngit log --oneline     compact history\ngit bisect start      find the bad commit\ngit reflog            recover lost commits' \
+    "$C/cheatsheet.jpg"
+  echo "built $C"
+fi
 echo "fixtures ready in $OUT"

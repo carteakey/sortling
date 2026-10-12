@@ -60,5 +60,12 @@
       "IMG_20261009_183000.jpg": "docs",
       "Screenshot_20261010.png": "screenshots"
     }
+  },
+  "charts": {
+    "default": {
+      "bandwidth_chart.png": ["docs/learning", "docs/work"],
+      "fig3.png": ["docs/learning", "docs/work"],
+      "cheatsheet.jpg": ["docs/learning", "docs/learning/archive"]
+    }
   }
 }

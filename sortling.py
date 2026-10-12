@@ -93,15 +93,16 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
             "kind": {
                 "instructions": "What kind of image is this?",
                 "criteria": {
-                    "screenshot": "a capture of a screen: app, website, chat, code, map, social feed, game",
+                    "screenshot": "a capture of a screen: app, website, chat, code, map, social feed, game, or a frame from a video or livestream",
                     "photo": "a real camera photo of people, places, food, pets, objects or scenery",
                     "meme": (
-                        "a meme, joke image, forwarded graphic, good morning or festival wishes card, "
-                        "motivational or religious quote image, or other made-to-share picture"
+                        "a meme, joke or reaction image, good morning or festival wishes card, "
+                        "motivational or religious quote image, or other picture made to amuse or greet (not a chart)"
                     ),
                     "document": (
-                        "a scan or photo of a paper document, or a screenshot of a record such as a receipt, "
-                        "order confirmation, booking, ticket, bill, ID or statement"
+                        "a scan or photo of a paper document, a screenshot of a record such as a receipt, "
+                        "order confirmation, booking, ticket, bill, ID or statement, "
+                        "or a chart, graph, infographic, paper figure, slide or cheat sheet"
                     ),
                 },
             },
@@ -114,13 +115,13 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
             },
             # documents: docs/<category>
             "category": {
-                "instructions": "If this is a document or record, which category of personal file is it?",
+                "instructions": "If this is a document, record, chart or figure, which category is it?",
                 "criteria": {
                     "personal": "identity documents, personal records, resumes, certificates, personal letters or chats",
                     "medical": "health records, lab reports, prescriptions, insurance claims for care",
                     "finance": "bank or card statements, invoices, receipts, bills, taxes, payments, payslips",
                     "work": "employer documents, job-related technical material, work chats, dashboards or tickets",
-                    "learning": "courses, lecture notes, tutorials, papers, cheat sheets, code or reference material",
+                    "learning": "courses, lecture notes, tutorials, papers, cheat sheets, charts, infographics, figures, code or reference material",
                     "travel": "bookings, boarding passes, tickets, itineraries, maps, visas in use for a trip",
                     "legal": "contracts, leases, property papers, legal notices, agreements",
                     "spam": "marketing, promotions, ads, junk, memes or throwaway content with no lasting value",
