@@ -1,10 +1,17 @@
 [project]
-name = "folderal"
-version = "0.1.0"
-description = "Local-first AI organizer for personal files"
+name = "sortling"
+version = "0.2.0"
+description = "Tidy screenshots, downloads and documents with decision models"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []
 
 [project.scripts]
-folderal = "folderal:main"
+sortling = "sortling:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["sortling"]
