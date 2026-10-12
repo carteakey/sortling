@@ -223,8 +223,7 @@ Useful flags:
 - `--types pdf,image`, `--recursive-source`
 - `--profile NAME`, `--profile-file JSON|-`, `--backend NAME`, `--second-pass NAME`, `--url URL`
 - `--json`: the plan as JSON on stdout
-- `--min-confidence` (0.6), `--screenshot-min-confidence` (0.3), `--delete-min-prob` (0.85),
-  `--record-min-prob` (0.5):
+- `--min-confidence` (0.6), `--screenshot-min-confidence` (0.3), `--delete-min-prob` (0.85):
   override the profile's thresholds for one run
 - `--show-profile [NAME]`: print a profile's questions, options and thresholds as JSON
 - `--delete-exact-duplicates`, `--hard-delete-delete-candidates`: real deletes, off by default

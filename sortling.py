@@ -88,6 +88,10 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
             "screenshot_min_confidence": 0.3,
             # a "yes, it's a record" this sure files a screenshot or photo as a document
             "record_min_prob": 0.5,
+            # an "unusable" (too dark, blurry, accidental) photo this sure goes to _delete. The junk
+            # question misses these (0.43-0.46 on a dark shot); this one scores 0.82-0.97 against
+            # at most 0.04 for good photos
+            "unusable_min_prob": 0.75,
             # junk probability needed for _delete
             "delete_min_prob": 0.85,
         },
@@ -123,6 +127,10 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
                     "Is this a record worth keeping: a receipt, an order, booking or payment confirmation, "
                     "a ticket, a bill, an ID or a statement?"
                 ),
+            },
+            # photos: a direct quality question, since models don't think of a dark photo as "junk"
+            "unusable": {
+                "instructions": "Is this photo unusable: too dark, too blurry, or taken by accident, so you can barely see what's in it?",
             },
             # documents: docs/<category>
             "category": {
@@ -196,8 +204,8 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
 }
 # the questions each built-in layout asks; the rest of an inherited spec is unused
 LAYOUT_QUESTIONS: Dict[str, Tuple[str, ...]] = {
-    "default": ("kind", "junk", "record", "category", "core", "topic", "photo"),
-    "photos": ("kind", "junk", "photo"),
+    "default": ("kind", "junk", "record", "unusable", "category", "core", "topic", "photo"),
+    "photos": ("kind", "junk", "unusable", "photo"),
 }
 # options the routing code depends on
 REQUIRED_OPTIONS: Dict[str, Tuple[str, ...]] = {
@@ -964,6 +972,7 @@ class Thresholds:
     screenshot_min_confidence: float
     delete_min_prob: float
     record_min_prob: float
+    unusable_min_prob: float
 
 
 THRESHOLD_KEYS: Tuple[str, ...] = tuple(f.name for f in fields(Thresholds))
@@ -1186,10 +1195,11 @@ def build_questions(profile: Profile, kind: str, has_image: bool) -> dict:
         return {"type": "choice", "instructions": profile.question(qid)["instructions"], "criteria": dict(profile.options(qid))}
 
     image_kind, photo = choice("kind"), choice("photo")
+    unusable = {"type": "noul", "instructions": profile.question("unusable")["instructions"]}
     if profile.layout == "photos":
         # the lean profile: 3 questions per image, documents are not sub-sorted
         if kind == "image" and has_image:
-            return {"kind": image_kind, "junk": junk, "photo": photo}
+            return {"kind": image_kind, "junk": junk, "unusable": unusable, "photo": photo}
         return {"junk": junk}
     category = choice("category")
     if kind == "image" and has_image:
@@ -1198,6 +1208,7 @@ def build_questions(profile: Profile, kind: str, has_image: bool) -> dict:
             "kind": image_kind,
             "junk": junk,
             "record": {"type": "noul", "instructions": profile.question("record")["instructions"]},
+            "unusable": unusable,
             "category": category,
             "topic": choice("topic"),
             "photo": photo,
@@ -1260,6 +1271,11 @@ def route(profile: Profile, answers: dict, th: Thresholds) -> Routed:
         if image_kind == "meme":
             return Routed("meme", "keep", MEMES_FOLDER, kind_p, reason, junkish)
         if image_kind == "photo":
+            unusable_p = to_float_0_1(answers["unusable"].get("noul")) if "unusable" in answers else 0.0
+            if "unusable" in answers:
+                reason += f",unusable={unusable_p:.2f}"
+            if unusable_p >= th.unusable_min_prob:
+                return Routed("photo:unusable", "delete_candidate", DELETE_FOLDER, unusable_p, reason)
             sub, sub_p = top_choice(answers, "photo")
             reason += f",photo:{sub}={sub_p:.2f}"
             if sub not in profile.options("photo") or sub_p < th.screenshot_min_confidence:
@@ -2685,8 +2701,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--screenshot-min-confidence", type=float,
                    help="Below this topic probability, screenshots go to screenshots/other (default: the profile's, 0.3)")
     p.add_argument("--delete-min-prob", type=float, help="Minimum junk probability for _delete (default: the profile's, 0.85)")
-    p.add_argument("--record-min-prob", type=float,
-                   help="A screenshot or photo this likely to be a receipt, ticket or confirmation is filed as a document (default: the profile's, 0.5)")
     p.add_argument("--delete-exact-duplicates", action="store_true", help="Delete exact duplicates instead of moving them to _duplicates")
     p.add_argument("--hard-delete-delete-candidates", action="store_true", help="Hard-delete junk instead of moving it to _delete")
     p.add_argument("--timeout-s", type=int, default=120, help="Model request timeout (seconds)")
@@ -2721,7 +2735,8 @@ def profile_payload(profile: Profile, flags: dict) -> dict:
 
 
 def threshold_flags(args: argparse.Namespace) -> dict:
-    return {k: getattr(args, k) for k in THRESHOLD_KEYS}
+    # thresholds without a flag (record_min_prob, unusable_min_prob) are set in the profile only
+    return {k: getattr(args, k, None) for k in THRESHOLD_KEYS}
 
 
 def resolve_backends(args: argparse.Namespace, cfg: dict) -> Tuple[Backend, Optional[Backend]]:
