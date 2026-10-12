@@ -32,6 +32,17 @@ Run with no arguments and it asks three things:
 Then it shows the plan ("12 → screenshots/code, 3 → _review …") and moves nothing until
 you say yes. Every applied run prints an undo command.
 
+While it works, the wizard's head sits next to the progress bar and reacts to each
+file, Doom-guy style:
+
+- **Happy** at an easy one, **confused** when unsure, **surprised** at junk.
+- **Wink** for memes, **heart eyes** for pets, **glasses** for a duplicate.
+- **Sleepy** while a model loads.
+- **Between files** it glances around and blinks.
+
+It needs a UTF-8 terminal at least 72×18 (truecolor if available, 256 colors otherwise).
+Turn it off with `--no-face` or `SORTLING_FACE=0`.
+
 ## ⚡ fast, 🐢 thorough, ⚡🐢 hybrid
 
 | | ⚡ fast | 🐢 thorough |
@@ -189,4 +200,6 @@ Expected folders are in `tests/expected.json`.
 The pixel wizard is in [`assets/`](assets/): poses (`wizard`, `wizard-reading`,
 `wizard-carrying`, `wizard-sleeping`, `wizard-bins`…), expression heads (`head-*.png`)
 and the full `character-sheet.png`. These are placeholder crops from the sheet; cleaner
-per-sprite art is coming.
+per-sprite art is coming. The terminal face is packed into `sortling.py` from the
+`head-*.png` files by `python3 tools/encode_faces.py` (needs ImageMagick); re-run it after
+replacing the heads.

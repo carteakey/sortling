@@ -256,6 +256,286 @@ def stage_note(message: str, enabled: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# The face: a Doom-guy-style status head that reacts to each decision
+# ---------------------------------------------------------------------------
+
+# packed by tools/encode_faces.py from assets/head-*.png; regenerate there, don't edit by hand
+# --- FACES BEGIN
+FACES_DATA = (
+    "eNqlWW1T4zrS/S98vh8MMRBu1X6QZNnxW4IcPFzNU8+HxAmyMRkDnhkns7X/fU8rCXkhsLt3qErhxG2pJfXpc7r9z7Pu7M+L"
+    "/h9nJf5d/XH2PHmaf/8+P/vz/87Ob5xL5/Lsj7OLK2fqFLiYX/Zv3CtczIq+ay+Kh+tr19oU573zC7rVu77uTXExvb667NFT"
+    "k/7ltHeDi8uLi+KCLi5m547zgIubq0un18dFr3funrt0cXPeP7+mpx6u3N4EF1f9nntBA173e9MezTW9vOq7PfLHnfUmdKt/"
+    "7V716KlruqBb7vX5xI7zMCvml3MaZ45xZvTLxeT6khy7dC6uz+nxea9f2Mf7k17vwk46hY9k7Mwcxzmnkc8vL1wyLmbT3sS1"
+    "4xTz6ZW9mE0LWsWDO7+cOXQxmU9ndvYCv12sLy5mNCAe7t3QrRvsz+XN+lZva9yfT+z2zi4L8hAWk0s7Bf2R8eS8P7umTXiY"
+    "Ts9vpnau6WRCNr3i4uqc3Jg71xiRbl3O5/OevdU775Fjjv2jW9fX82v37P9x9TpZzNuzP/951i6qJ5z8Gfvbf1IwFX5uYkKP"
+    "M+Vz85lNKjkrQqFqIT6wE12KyfJIqC4VzDlp45nU44ps+kqqbsxOjOUphXHMWC5VJJXO/EyP3s+Vw6Z/J5eF53M19EqTB0dz"
+    "+qYbkC9BVvzlL+scCxgK4w73bbhp7wPTxKKsB0HWZjKTw+OpRKc83uW+4GHhl84sKGF1OFfgq2LKlq3HunTAs3AsMnXvmWZ/"
+    "LMG6YugZR7DSneNMEq5MhAdi0e3GwbOZp9zRYMXuwnFYhV3LpclT2AnPbH3udMDNSFSyDFfqEVZlyGSCb6nPt3vlpLBRXpU+"
+    "ReN8EVX6KRJhFa3MEPuSbsYa4jCUWKXP0bh5icYadvlTVKVlxHQQlGrjv5P7ynmJKhVHK7qfP8Ud2cs7L9PZ1i/E0Wtc5Qtm"
+    "NM0Ju24YrfQiNKHyjbtd4ygU+iVSLY8q5yUZ61asXNhrxFW7i4Ex+5kKiTlzrDtcYLwSm1APyv7elravyar/MxLwp2rI9wVt"
+    "VLh0D0+wYmU4bnb7UNVlKNr46JyDRJhmtwd5M+hC8T463YmoKGDMD/qkWfO/AvIfgHo5eX5e/R6sgdhw8qmJCgmyt/7HFl8A"
+    "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"
+)
+# --- FACES END
+
+_FACES: Optional[dict] = None
+
+
+def load_faces() -> dict:
+    """{"w", "h", "frames": {name: [[rgb or None] * w] * h}} decoded from FACES_DATA."""
+    global _FACES
+    if _FACES is None:
+        import zlib
+
+        blob = json.loads(zlib.decompress(base64.b64decode("".join(FACES_DATA))))
+        palette = [None] + [tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) for c in blob["palette"]]
+        w, h = blob["w"], blob["h"]
+        frames = {}
+        for name, data in blob["frames"].items():
+            px = base64.b64decode(data)
+            frames[name] = [[palette[px[y * w + x]] for x in range(w)] for y in range(h)]
+        _FACES = {"w": w, "h": h, "frames": frames}
+    return _FACES
+
+
+def _xterm256(rgb: Tuple[int, int, int]) -> int:
+    r, g, b = (int(round(c / 255 * 5)) for c in rgb)
+    return 16 + 36 * r + 6 * g + b
+
+
+def render_face(name: str, mirror: bool, truecolor: bool) -> List[str]:
+    """One string per terminal row: two pixel rows per row with half-block characters."""
+    faces = load_faces()
+    rows = faces["frames"][name]
+    if mirror:
+        rows = [list(reversed(r)) for r in rows]
+
+    def fg(c):
+        return f"\033[38;2;{c[0]};{c[1]};{c[2]}m" if truecolor else f"\033[38;5;{_xterm256(c)}m"
+
+    def bg(c):
+        return f"\033[48;2;{c[0]};{c[1]};{c[2]}m" if truecolor else f"\033[48;5;{_xterm256(c)}m"
+
+    out = []
+    for y in range(0, faces["h"], 2):
+        top, bot = rows[y], rows[y + 1] if y + 1 < faces["h"] else [None] * faces["w"]
+        line = []
+        for t, b in zip(top, bot):
+            if t is None and b is None:
+                line.append("\033[0m ")
+            elif b is None:
+                line.append("\033[0m" + fg(t) + "▀")
+            elif t is None:
+                line.append("\033[0m" + fg(b) + "▄")
+            else:
+                line.append(fg(t) + bg(b) + "▀")
+        out.append("".join(line) + "\033[0m")
+    return out
+
+
+def face_mode(stream=None) -> str:
+    """'truecolor', '256' or '' (no face). SORTLING_FACE=0 turns it off, =force renders anywhere."""
+    stream = stream or sys.stderr
+    env = os.environ.get("SORTLING_FACE", "").lower()
+    if env in ("0", "off", "no") or os.environ.get("NO_COLOR"):
+        return ""
+    forced = env == "force"
+    if not forced:
+        if not getattr(stream, "isatty", lambda: False)() or os.environ.get("TERM", "dumb") in ("", "dumb"):
+            return ""
+        if not unicode_ok(stream):
+            return ""
+        size = shutil.get_terminal_size((80, 24))
+        if size.columns < 72 or size.lines < 18:
+            return ""
+    colorterm = os.environ.get("COLORTERM", "").lower()
+    return "truecolor" if forced or colorterm in ("truecolor", "24bit") else "256"
+
+
+# what the face does for each outcome, and the caption beside it
+MOODS: Dict[str, Tuple[str, str]] = {
+    "working": ("smile", "sorting..."),
+    "confident": ("happy", "easy one"),
+    "unsure": ("confused", "hmm, not sure -> _review"),
+    "junk": ("surprised", "yikes, junk -> _delete"),
+    "duplicate": ("nerd", "seen this one before"),
+    "meme": ("wink", "a meme, keeping it in memes/"),
+    "pet": ("love", "aww"),
+    "fallback": ("surprised", "no model, guessing from the filename"),
+    "loading": ("sleepy", "waking the model..."),
+    "done": ("happy", "all sorted!"),
+}
+
+
+def mood_for(rec: "DocRecord") -> str:
+    if rec.classifier.startswith("fallback"):
+        return "fallback"
+    if rec.duplicate_of:
+        return "duplicate"
+    if rec.target_folder == REVIEW_FOLDER or rec.target_folder.endswith("/other"):
+        return "unsure"
+    if rec.target_folder == DELETE_FOLDER:
+        return "junk"
+    if rec.target_folder == MEMES_FOLDER:
+        return "meme"
+    if rec.target_folder == f"{PHOTOS_FOLDER}/pets":
+        return "pet"
+    return "confident" if rec.confidence >= 0.9 else "working"
+
+
+class FaceBar(ProgressBar):
+    """ProgressBar with the face beside it. A background thread keeps the face alive between
+    updates: it glances left and right and blinks, like Doom guy waiting for something to happen."""
+
+    REACT_SECONDS = 1.1
+    TICK_SECONDS = 0.35
+
+    def __init__(self, total: int, label: str, mode: str, stream=None, width: int = 30) -> None:
+        import threading
+
+        self.mode = mode
+        self.lock = threading.Lock()
+        self.mood = "working"
+        self.mood_until = 0.0
+        self.tick = 0
+        self.done = 0
+        self.detail = ""
+        self.counts: Dict[str, int] = {}
+        self.rows = (load_faces()["h"] + 1) // 2
+        self.drawn = False
+        self._stop = threading.Event()
+        super().__init__(total, label, enabled=True, width=width, stream=stream)
+        self.dynamic = True
+        self.thread = threading.Thread(target=self._animate, daemon=True)
+        self.thread.start()
+
+    def _frame(self) -> Tuple[str, bool]:
+        mood = self.mood if time.time() < self.mood_until or self.mood in ("loading", "done") else "working"
+        name = MOODS[mood][0]
+        if mood != "working":
+            return name, False
+        # idle: look left, look right, sometimes blink or squint at the paperwork
+        beat = self.tick % 12
+        if beat == 7:
+            return "sleepy", False
+        if beat in (9, 10):
+            return "nerd", False
+        return "smile", beat in (3, 4, 5)
+
+    def _draw(self) -> None:
+        name, mirror = self._frame()
+        face = render_face(name, mirror, self.mode == "truecolor")
+        mood = self.mood if time.time() < self.mood_until or self.mood in ("loading", "done") else "working"
+        side = [""] * self.rows
+        side[2] = self._format(self.done, "")
+        side[4] = self.detail[:60]
+        side[6] = color(MOODS[mood][1], "2") if mood != "working" else ""
+        if self.counts:
+            tally = "  ".join(f"{k} {v}" for k, v in sorted(self.counts.items(), key=lambda kv: -kv[1])[:4])
+            side[8] = color(tally[:60], "2")
+        out = []
+        if self.drawn:
+            out.append(f"\033[{self.rows}F")
+        for row, text in zip(face, side):
+            out.append(f"\033[2K  {row}   {text}\n")
+        self.stream.write("".join(out))
+        self.stream.flush()
+        self.drawn = True
+
+    def _animate(self) -> None:
+        while not self._stop.wait(self.TICK_SECONDS):
+            with self.lock:
+                self.tick += 1
+                self._draw()
+
+    def update(self, done: int, detail: str = "") -> None:
+        with self.lock:
+            self.done = min(max(int(done), 0), self.total)
+            if detail:
+                self.detail = detail
+            self._draw()
+
+    def react(self, mood: str, folder: str = "") -> None:
+        with self.lock:
+            if folder:
+                top = folder.split("/", 1)[0]
+                self.counts[top] = self.counts.get(top, 0) + 1
+            if mood != "working" or time.time() >= self.mood_until:
+                self.mood, self.mood_until = mood, time.time() + self.REACT_SECONDS
+            self._draw()
+
+    def finish(self, detail: str = "done") -> None:
+        self._stop.set()
+        self.thread.join(timeout=1)
+        with self.lock:
+            self.done, self.detail = self.total, detail
+            self.mood, self.mood_until = "done", time.time() + 60
+            self._draw()
+
+
+def make_bar(total: int, label: str, enabled: bool, width: int, face: bool = True) -> ProgressBar:
+    mode = face_mode() if enabled and face and FACES_DATA else ""
+    return FaceBar(total, label, mode, width=width) if mode else ProgressBar(total, label, enabled=enabled, width=width)
+
+
+class FaceWait:
+    """The sleepy face while something slow happens (a router loading a model)."""
+
+    def __init__(self, label: str, enabled: bool) -> None:
+        mode = face_mode() if enabled and FACES_DATA else ""
+        self.bar: Optional[FaceBar] = FaceBar(1, label, mode) if mode else None
+        if self.bar:
+            self.bar.react("loading")
+
+    def close(self, label: str) -> None:
+        if self.bar:
+            self.bar._stop.set()
+            self.bar.thread.join(timeout=1)
+            with self.bar.lock:
+                self.bar.done, self.bar.detail, self.bar.mood = 1, label, "confident"
+                self.bar.mood_until = time.time() + 60
+                self.bar._draw()
+
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
@@ -1138,6 +1418,7 @@ class RunOptions:
     hard_delete: bool = False
     progress: bool = True
     progress_width: int = 32
+    face: bool = True
     status: str = ""
     second_status: str = ""
 
@@ -1162,7 +1443,9 @@ def precheck_backend(opts: RunOptions) -> None:
     if opts.backend is None:
         opts.status = "fallback:disabled"
     else:
+        wait = FaceWait(f"waking {opts.backend.name}...", opts.progress and opts.face)
         why = _check(opts.backend, opts.timeout_s)
+        wait.close(f"{opts.backend.name} {'is awake' if not why else 'did not answer'}")
         opts.status = f"fallback:{opts.backend.name}-unavailable:{why}" if why else f"{opts.backend.mode}:{opts.backend.name}"
         if why:
             opts.backend = None
@@ -1247,7 +1530,7 @@ def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None
     duplicate_of = build_duplicate_lookup(root, source_files, opts.kinds, opts.progress, opts.progress_width)
 
     stage_note("Stage 2/3: extracting + classifying files", opts.progress)
-    bar = ProgressBar(total=len(source_files), label="Classify", enabled=opts.progress, width=opts.progress_width)
+    bar = make_bar(len(source_files), "Classify", opts.progress, opts.progress_width, opts.face)
     consecutive_timeouts = 0
     records: List[DocRecord] = []
     uncertain: List[Tuple[DocRecord, FileInput]] = []
@@ -1282,6 +1565,8 @@ def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None
         if is_uncertain and not rec.duplicate_of:
             uncertain.append((rec, fi))
         bar.update(idx, f"{path.name} -> {rec.target_folder}")
+        if isinstance(bar, FaceBar):
+            bar.react(mood_for(rec), rec.target_folder)
         if on_file:
             on_file(rec)
     bar.finish("classification complete")
@@ -1296,7 +1581,7 @@ def second_pass(opts: RunOptions, uncertain: Sequence[Tuple[DocRecord, FileInput
     second = opts.second
     assert second is not None
     stage_note(f"Stage 2b/3: second look at {len(uncertain)} uncertain files ({second.mode}:{second.name})", opts.progress)
-    bar = ProgressBar(total=len(uncertain), label="Re-check", enabled=opts.progress, width=opts.progress_width)
+    bar = make_bar(len(uncertain), "Re-check", opts.progress, opts.progress_width, opts.face)
     for idx, (rec, fi) in enumerate(uncertain, start=1):
         if fi.kind == "image" and not second.vision:
             rec.second_pass = f"skipped:{second.name}-text-only"
@@ -1315,6 +1600,8 @@ def second_pass(opts: RunOptions, uncertain: Sequence[Tuple[DocRecord, FileInput
                 rec.reason = (f"{routed.reason} | first:{first}" + (f" | vision:{fi.vision_source}" if fi.image_b64 else ""))[:260]
                 assign_action(rec, opts.delete_exact_duplicates, opts.hard_delete)
         bar.update(idx, f"{rec.file} -> {rec.target_folder}")
+        if isinstance(bar, FaceBar):
+            bar.react(mood_for(rec), rec.target_folder)
     bar.finish("second pass complete")
 
 
@@ -1385,7 +1672,7 @@ def apply_record(root: Path, rec: DocRecord) -> None:
 
 def apply_all(opts: RunOptions, records: Sequence[DocRecord]) -> None:
     stage_note("Stage 3/3: applying actions", opts.progress)
-    bar = ProgressBar(total=len(records), label="Apply", enabled=opts.progress, width=opts.progress_width)
+    bar = make_bar(len(records), "Apply", opts.progress, opts.progress_width, opts.face)
     for idx, rec in enumerate(records, start=1):
         try:
             apply_record(opts.root, rec)
@@ -1675,6 +1962,7 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
         timeout_s=args.timeout_s,
         progress=True,
         progress_width=args.progress_width,
+        face=not args.no_face,
     )
     precheck_backend(opts)
     if opts.backend is None:
@@ -1753,6 +2041,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--write-review-note", action="store_true", help="Update _review/REVIEW_LIST.txt")
     p.add_argument("--no-progress", action="store_true", help="Disable progress bars and stage logs")
     p.add_argument("--no-banner", action="store_true", help="Skip the banner in interactive mode")
+    p.add_argument("--no-face", action="store_true", help="Plain progress bar instead of the animated face (also SORTLING_FACE=0)")
     p.add_argument("--progress-width", type=int, default=32, help="Progress bar width")
     p.add_argument("--max-consecutive-timeouts", type=int, default=3, help="Stop using the model after this many timeouts in a row")
     p.add_argument("--retry-timeouts", type=int, default=1, help="Per-file retries on timeouts")
@@ -1843,6 +2132,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         hard_delete=args.hard_delete_delete_candidates,
         progress=not args.no_progress,
         progress_width=args.progress_width,
+        face=not args.no_face,
     )
     precheck_backend(opts)
     records = plan(opts)
