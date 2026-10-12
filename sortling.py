@@ -1530,7 +1530,10 @@ def build_duplicate_lookup(
     hash_groups: Dict[str, List[Path]] = {}
     progress = ProgressBar(total=len(scan_files), label="Hash scan", enabled=show_progress, width=width)
     for idx, p in enumerate(scan_files, start=1):
-        hash_groups.setdefault(sha1_file(p), []).append(p)
+        try:
+            hash_groups.setdefault(sha1_file(p), []).append(p)
+        except OSError:
+            continue  # moved or deleted since the folder was listed (a sync, a download, the user)
         progress.update(idx, p.name)
     progress.finish("hash complete")
     duplicate_of: Dict[Path, Path] = {}
@@ -2213,6 +2216,13 @@ def classify(backend: Backend, fi: FileInput, opts: RunOptions) -> Tuple[Routed,
     return routed, err
 
 
+def safe_sha1(path: Path) -> str:
+    try:
+        return sha1_file(path)
+    except OSError:
+        return ""
+
+
 def pdf_renderer_available() -> bool:
     try:
         import fitz  # type: ignore  # noqa: F401
@@ -2249,10 +2259,18 @@ def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None
     consecutive_timeouts = 0
     timings: List[float] = []
     warned_slow = False
+    vanished = 0
     records: List[DocRecord] = []
     uncertain: List[Tuple[DocRecord, FileInput]] = []
     for idx, path in enumerate(source_files, start=1):
-        fi = prepare_input(path, opts)
+        if not path.is_file():
+            vanished += 1  # moved or deleted since the folder was listed
+            continue
+        try:
+            fi = prepare_input(path, opts)
+        except OSError:
+            vanished += 1
+            continue
         backend = opts.backend
         if backend is not None and fi.kind == "image" and not backend.vision:
             backend = None  # a text-only model would only see the filename
@@ -2307,6 +2325,8 @@ def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None
         if on_file:
             on_file(rec)
     bar.finish("classification complete")
+    if vanished:
+        print(f"{icon('warn')} {vanished} file(s) moved or disappeared during the run and were skipped", file=sys.stderr)
 
     if opts.second is not None and uncertain:
         second_pass(opts, uncertain)
@@ -2350,7 +2370,7 @@ def make_record(root: Path, fi: FileInput, routed: Routed, classifier: str, dupl
         file=fi.path.name,
         kind=fi.kind,
         source_relpath=str(fi.path.relative_to(root)),
-        sha1=sha1_file(fi.path),
+        sha1=safe_sha1(fi.path),
         duplicate_of=str(duplicate_of[fi.path].relative_to(root)) if fi.path in duplicate_of else "",
         extractor=fi.extractor,
         text_chars=len(fi.text),
