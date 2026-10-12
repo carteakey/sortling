@@ -47,36 +47,44 @@ def main() -> int:
     sets = [s for s in args.sets.split(",") if s] or list(expected)
     want_profiles = [s for s in args.profiles.split(",") if s]
 
-    totals = {b: [0, 0] for b in args.backend}
-    rows = []
+    jobs = []
     for name in sets:
         root = HERE / "fixtures" / name
         if not root.is_dir():
             print(f"error: {root} missing; run tests/make_fixtures.sh first", file=sys.stderr)
             return 2
         for profile, truth in expected[name].items():
-            if want_profiles and profile not in want_profiles:
-                continue
-            for backend in args.backend:
-                t0 = time.time()
-                try:
-                    data = run(root, backend, profile, args.config, args.timeout_s)
-                except RuntimeError as exc:
-                    print(f"{name}/{profile}/{backend}: {exc}", file=sys.stderr)
-                    return 1
-                got = {r["file"]: r for r in data["records"]}
-                misses = []
-                for fname, want in truth.items():
-                    ok_set = want if isinstance(want, list) else [want]
-                    rec = got.get(fname)
-                    folder = rec["target_folder"] if rec else "(missing)"
-                    if folder not in ok_set:
-                        misses.append((fname, " or ".join(ok_set), folder, rec["reason"] if rec else ""))
-                right = len(truth) - len(misses)
-                totals[backend][0] += right
-                totals[backend][1] += len(truth)
-                fallback = data.get("classifier", "").startswith("fallback")
-                rows.append((name, profile, backend, right, len(truth), time.time() - t0, fallback, misses))
+            if not want_profiles or profile in want_profiles:
+                jobs.append((name, profile, truth, root))
+
+    totals = {b: [0, 0, 0.0] for b in args.backend}
+    rows = []
+    # one backend at a time: on a single-GPU router, alternating backends reloads a model per job
+    for backend in args.backend:
+        for name, profile, truth, root in jobs:
+            t0 = time.time()
+            try:
+                data = run(root, backend, profile, args.config, args.timeout_s)
+            except RuntimeError as exc:
+                print(f"{name}/{profile}/{backend}: {exc}", file=sys.stderr)
+                return 1
+            got = {r["file"]: r for r in data["records"]}
+            misses = []
+            for fname, want in truth.items():
+                ok_set = want if isinstance(want, list) else [want]
+                rec = got.get(fname)
+                folder = rec["target_folder"] if rec else "(missing)"
+                if folder not in ok_set:
+                    misses.append((fname, " or ".join(ok_set), folder, rec["reason"] if rec else ""))
+            right, secs = len(truth) - len(misses), time.time() - t0
+            totals[backend][0] += right
+            totals[backend][1] += len(truth)
+            totals[backend][2] += secs
+            fallback = data.get("classifier", "").startswith("fallback")
+            rows.append((name, profile, backend, right, len(truth), secs, fallback, misses))
+    # print grouped by set so backends sit side by side
+    order = {(n, p): i for i, (n, p, _, _) in enumerate(jobs)}
+    rows.sort(key=lambda r: (order[(r[0], r[1])], args.backend.index(r[2])))
 
     print(f"{'set':<14} {'profile':<9} {'backend':<14} {'score':>7}  {'time':>6}")
     for name, profile, backend, right, n, secs, fallback, misses in rows:
@@ -86,8 +94,8 @@ def main() -> int:
             for fname, want, folder, reason in misses:
                 print(f"    x {fname}: want {want}, got {folder}  [{reason[:110]}]")
     print()
-    for backend, (right, n) in totals.items():
-        print(f"total {backend:<14} {right}/{n} ({100 * right / max(n, 1):.0f}%)")
+    for backend, (right, n, secs) in totals.items():
+        print(f"total {backend:<14} {right}/{n} ({100 * right / max(n, 1):.0f}%)  in {secs:.0f}s")
     return 0
 
 
