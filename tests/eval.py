@@ -75,8 +75,12 @@ def main() -> int:
             got = {r["file"]: r for r in data["records"]}
             misses = []
             for fname, want in truth.items():
-                ok_set = want if isinstance(want, list) else [want]
                 rec = got.get(fname)
+                if want is None:  # must be left alone
+                    if rec:
+                        misses.append((fname, "(left alone)", rec["target_folder"], rec["reason"]))
+                    continue
+                ok_set = want if isinstance(want, list) else [want]
                 folder = rec["target_folder"] if rec else "(missing)"
                 if folder not in ok_set:
                     misses.append((fname, " or ".join(ok_set), folder, rec["reason"] if rec else ""))

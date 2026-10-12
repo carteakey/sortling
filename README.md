@@ -80,6 +80,7 @@ docs/          personal/ medical/ legal/ finance/ work/ travel/ learning/ (+ lea
 screenshots/   code/ chats/ reading/ apps/ social/ shopping/ maps/ media/ other/
 photos/        people/ places/ food/ pets/ events/ other/
 memes/         memes, forwards, good-morning and festival cards, quote images
+files/         archives/ installers/ audio/ video/ ebooks/ fonts/ code/ data/ documents/ 3d/ torrents/
 _review/       uncertain documents only, where misfiling matters
 _delete/       junk (only at junk probability >= 0.85)
 _duplicates/   exact duplicates
@@ -95,13 +96,23 @@ _sortling/     manifests (CSV + JSON) for every run
 - **Camera photos get a few coarse folders on purpose.** Photo apps do faces and places better.
 - **Memes are kept, not deleted.** `memes/` is the bin you review and empty; only real junk
   (blurry, accidental, black shots) goes to `_delete`.
-- **Scanned PDFs work.** When a PDF has no real text layer, its first page is rendered
-  (PyMuPDF, `pdftoppm` or macOS `qlmanage`) and read as an image.
+- **Office and text files are read, not just moved.** docx, pptx, xlsx, odt/odp/ods, rtf,
+  txt and md have their text extracted with the standard library and get the same
+  questions as PDFs, so a Word invoice lands in `docs/finance`.
+- **Everything else goes by extension, no model:** `files/archives`, `files/installers`,
+  `files/video` and so on. Unknown extensions, hidden files and unfinished downloads
+  (`.crdownload`, `.part`) are left where they are. The rules live in the profile (see
+  them with `--show-profile`), so you can change them.
+- **PDFs are read even with nothing installed.** sortling uses `pypdf` or `pdftotext` when
+  present; otherwise its own reader unpacks the PDF's compressed text, page by page, with
+  each font's character map (it handles LaTeX, Office and browser "Save as PDF" output).
+  Scanned PDFs with no text layer get their first page rendered (PyMuPDF, `pdftoppm` or
+  macOS `qlmanage`) and read as an image.
 
 ### `photos`
 
 For camera rolls and chat-app dumps (the old unforwarder job): `photos/<category>`,
-`memes/`, `screenshots/`, `docs/` (not sub-sorted). It asks 3 questions per image instead
+`memes/`, `screenshots/`, `docs/` (not sub-sorted). It only sorts pictures and PDFs and leaves other files alone. It asks 3 questions per image instead
 of 5, so it's faster.
 
 ### Your own
@@ -220,7 +231,7 @@ Useful flags:
 
 - `--apply`: move files (default is a dry run that only writes the manifest)
 - `--undo MANIFEST`: move an applied run's files back (deleted files can't return)
-- `--types pdf,image`, `--recursive-source`
+- `--types pdf,image,doc,file` (default: all), `--recursive-source`
 - `--profile NAME`, `--profile-file JSON|-`, `--backend NAME`, `--second-pass NAME`, `--url URL`
 - `--json`: the plan as JSON on stdout
 - `--min-confidence` (0.6), `--screenshot-min-confidence` (0.3), `--delete-min-prob` (0.85):

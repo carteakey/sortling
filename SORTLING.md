@@ -1,6 +1,7 @@
 # SORTLING.md: instructions for agents
 
-You can use `sortling.py` to sort a folder of files (PDFs and images) into folders with
+You can use `sortling.py` to sort a folder of files (PDFs, images, Office and text documents, and
+anything else by extension) into folders with
 a local or hosted classification model. Read this whole file before running it. The
 script is one Python 3.9+ file with no dependencies; no install step is needed.
 
@@ -27,7 +28,9 @@ python3 sortling.py --root <folder> --json --no-progress --apply         # after
 python3 sortling.py --undo <manifest.json>                               # put everything back
 ```
 
-- **Pick files:** `--types pdf,image` (default both), `--recursive-source` (subfolders too).
+- **Pick files:** `--types pdf,image,doc,file` (default all: `doc` = Office/text files that are read,
+  `file` = sorted by extension without a model), `--recursive-source` (subfolders too).
+  Hidden files, unknown extensions and unfinished downloads are never touched.
 - **Pick a profile:** `--profile default|photos|<saved name>`, or
   `--profile-file <file.json>` (`-` reads stdin).
 - **Pick a backend:** `--backend <name>` (see `--list-backends`). Add `--second-pass <name>`
@@ -61,6 +64,8 @@ EOF
 ```
 
 - At least 2 folders. Names are lowercased and slugified (`AI Memes` becomes `ai-memes`).
+- Optional `"extensions": {"stl": "3d-prints"}` sorts files by extension into your folders
+  without asking the model. Other extension-only files are left alone.
 - Reserved names: `_review`, `_delete`, `_duplicates`, `none`.
 - A file goes to `_review/` when no folder clearly fits (probability below 0.6), and to
   `_delete/` only when the model is at least 85% sure it's junk.

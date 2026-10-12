@@ -70,7 +70,8 @@ DOCS_FOLDER = "docs"
 LEARNING_ARCHIVE_FOLDER = "docs/learning/archive"
 PHOTOS_FOLDER = "photos"
 MEMES_FOLDER = "memes"
-DEFAULT_PROFILE_ROOTS: Tuple[str, ...] = (DOCS_FOLDER, "screenshots", PHOTOS_FOLDER, MEMES_FOLDER)
+FILES_FOLDER = "files"
+DEFAULT_PROFILE_ROOTS: Tuple[str, ...] = (DOCS_FOLDER, "screenshots", PHOTOS_FOLDER, MEMES_FOLDER, FILES_FOLDER)
 NONE_OPTION = "none"
 
 # Built-in profiles as plain JSON data: the questions the model is asked, their options and the
@@ -178,6 +179,22 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
                 },
             },
         },
+        # everything that isn't a PDF, image or text document: files/<folder> by extension, no model.
+        # Unknown extensions are left where they are.
+        "files": {
+            "archives": [".zip", ".7z", ".rar", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".zst"],
+            "installers": [".dmg", ".pkg", ".exe", ".msi", ".deb", ".rpm", ".appimage", ".apk", ".iso", ".flatpakref"],
+            "audio": [".mp3", ".m4a", ".wav", ".flac", ".aac", ".ogg", ".opus", ".aiff"],
+            "video": [".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v", ".wmv"],
+            "ebooks": [".epub", ".mobi", ".azw", ".azw3", ".djvu", ".cbz", ".cbr"],
+            "fonts": [".ttf", ".otf", ".woff", ".woff2"],
+            "code": [".py", ".js", ".ts", ".ipynb", ".json", ".yaml", ".yml", ".toml", ".sh", ".html", ".css",
+                     ".c", ".cpp", ".h", ".rs", ".go", ".java", ".sql", ".xml"],
+            "data": [".csv", ".tsv", ".parquet", ".sqlite", ".db", ".xls", ".numbers", ".ics", ".vcf", ".gpx", ".kml"],
+            "documents": [".doc", ".ppt", ".pages", ".key", ".odg"],
+            "3d": [".stl", ".obj", ".3mf", ".gcode", ".step", ".stp"],
+            "torrents": [".torrent"],
+        },
         # model answers outside the category options that mean one of them
         "category_aliases": {
             "personal_records": "personal",
@@ -200,6 +217,8 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
     "photos": {
         "extends": "default",
         "description": "camera rolls and WhatsApp dumps: photos/<category>, memes/, screenshots/, docs/",
+        # leaves archives, installers and other files where they are
+        "files": None,
     },
 }
 # the questions each built-in layout asks; the rest of an inherited spec is unused
@@ -216,6 +235,11 @@ REQUIRED_OPTIONS: Dict[str, Tuple[str, ...]] = {
 }
 
 PDF_EXTS: Tuple[str, ...] = (".pdf",)
+# text-bearing documents: the text is extracted (standard library only) and asked about like a PDF
+DOC_TEXT_EXTS: Tuple[str, ...] = (".docx", ".pptx", ".xlsx", ".odt", ".odp", ".ods", ".rtf", ".txt", ".md", ".markdown")
+# downloads still in progress are never touched
+PARTIAL_EXTS: Tuple[str, ...] = (".crdownload", ".part", ".partial", ".download", ".opdownload", ".tmp")
+ALL_KINDS: Tuple[str, ...] = ("pdf", "image", "doc", "file")
 # png/jpeg/gif/bmp are decoded natively by llama.cpp; the rest are converted to PNG first
 IMAGE_EXTS: Tuple[str, ...] = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".heic", ".tif", ".tiff")
 NATIVE_IMAGE_MIME: Dict[str, str] = {
@@ -976,7 +1000,7 @@ class Thresholds:
 
 
 THRESHOLD_KEYS: Tuple[str, ...] = tuple(f.name for f in fields(Thresholds))
-SPEC_KEYS: Tuple[str, ...] = ("description", "thresholds", "questions", "category_aliases")
+SPEC_KEYS: Tuple[str, ...] = ("description", "thresholds", "questions", "category_aliases", "files")
 
 
 @dataclass
@@ -986,6 +1010,8 @@ class Profile:
     # "default" and "photos" are built in; "custom" uses folders (folder -> description)
     layout: str = "custom"
     folders: Dict[str, str] = field(default_factory=dict)
+    # custom profiles: ".ext" -> folder, for files sorted by extension without a model
+    extensions: Dict[str, str] = field(default_factory=dict)
     source: str = ""  # where it came from: built-in, config, file path
     # the merged BUILTIN_PROFILE_SPECS entry for built-in layouts; custom ones may set thresholds
     spec: dict = field(default_factory=dict)
@@ -1000,7 +1026,7 @@ class Profile:
             return DEFAULT_PROFILE_ROOTS
         if self.layout == "photos":
             return (PHOTOS_FOLDER, MEMES_FOLDER, "screenshots", DOCS_FOLDER)
-        return tuple(self.folders)
+        return tuple(dict.fromkeys([*self.folders, *self.extensions.values()]))
 
     def question(self, qid: str) -> dict:
         return self.spec["questions"][qid]
@@ -1094,6 +1120,14 @@ def check_spec(spec: dict, layout: str, source: str) -> None:
             bad = [o for o in crit if slugify(o) != o or o == NONE_OPTION]
             if bad:
                 raise ValueError(f"{where}.criteria: {', '.join(bad)} can't be a folder name (use lowercase letters, digits and -)")
+    files = spec.get("files") or {}
+    if not isinstance(files, dict):
+        raise ValueError(f"{source}: files must map folder names to lists of extensions")
+    for folder, exts in files.items():
+        if slugify(folder) != folder:
+            raise ValueError(f"{source}: files.{folder} can't be a folder name (use lowercase letters, digits and -)")
+        if not isinstance(exts, list) or not all(isinstance(e, str) and e.startswith(".") for e in exts):
+            raise ValueError(f'{source}: files.{folder} must be a list of extensions like ".zip"')
     aliases = spec.get("category_aliases", {})
     if not isinstance(aliases, dict) or not all(isinstance(v, str) for v in aliases.values()):
         raise ValueError(f"{source}: category_aliases must map model answers to category names")
@@ -1132,6 +1166,12 @@ def profile_from_dict(raw: dict, name: str, source: str, cfg: dict, seen: Tuple[
     clash = sorted(set(folders) & {*SYSTEM_FOLDERS, NONE_OPTION})
     if clash:
         raise ValueError(f"{source}: reserved folder names: {', '.join(clash)}")
+    extensions: Dict[str, str] = {}
+    for ext, folder in (raw.get("extensions") or {}).items():
+        ext = ext.lower() if ext.startswith(".") else "." + ext.lower()
+        extensions[ext] = slugify(str(folder))
+    if set(extensions.values()) & {*SYSTEM_FOLDERS, NONE_OPTION}:
+        raise ValueError(f"{source}: extensions can't map to a reserved folder")
     spec = custom_spec()
     if "thresholds" in raw:
         check_thresholds(raw["thresholds"], source)
@@ -1141,6 +1181,7 @@ def profile_from_dict(raw: dict, name: str, source: str, cfg: dict, seen: Tuple[
         description=str(raw.get("description", "")),
         layout="custom",
         folders=folders,
+        extensions=extensions,
         source=source,
         spec=spec,
     )
@@ -1380,12 +1421,38 @@ class DocRecord:
 
 
 def file_kind(path: Path) -> str:
+    """pdf, image or doc (asked about), file (sorted by extension), or "" (left alone)."""
+    name = path.name.lower()
+    if name.startswith(".") or name.endswith(PARTIAL_EXTS):
+        return ""  # hidden files (.DS_Store, .sortling.json) and unfinished downloads
     ext = path.suffix.lower()
     if ext in PDF_EXTS:
         return "pdf"
     if ext in IMAGE_EXTS:
         return "image"
+    if ext in DOC_TEXT_EXTS:
+        return "doc"
+    return "file" if ext else ""
+
+
+def file_folder(profile: "Profile", path: Path) -> str:
+    """The files/<folder> an extension-sorted file goes to under this profile, or "" to leave it."""
+    ext = path.suffix.lower()
+    if profile.layout == "custom":
+        return profile.extensions.get(ext, "")
+    for folder, exts in (profile.spec.get("files") or {}).items():
+        if ext in exts:
+            return f"{FILES_FOLDER}/{folder}"
     return ""
+
+
+def wanted(profile: "Profile", path: Path, kinds: Sequence[str]) -> bool:
+    kind = file_kind(path)
+    if kind not in kinds:
+        return False
+    if profile.layout == "photos" and kind == "doc":
+        return False  # the photos profile only sorts pictures and PDFs
+    return kind != "file" or bool(file_folder(profile, path))
 
 
 def is_in_sorted_folder(root: Path, file_path: Path, sorted_roots: Sequence[str]) -> bool:
@@ -1396,17 +1463,18 @@ def is_in_sorted_folder(root: Path, file_path: Path, sorted_roots: Sequence[str]
     return len(rel.parts) > 1 and rel.parts[0] in sorted_roots
 
 
-def list_source_files(root: Path, recursive: bool, kinds: Sequence[str], sorted_roots: Sequence[str]) -> List[Path]:
+def list_source_files(root: Path, recursive: bool, kinds: Sequence[str], profile: "Profile") -> List[Path]:
     candidates = root.rglob("*") if recursive else root.iterdir()
+    roots = sorted_roots(profile)
     return sorted(
         p
         for p in candidates
-        if p.is_file() and file_kind(p) in kinds and not is_in_sorted_folder(root, p, sorted_roots)
+        if p.is_file() and not is_in_sorted_folder(root, p, roots) and wanted(profile, p, kinds)
     )
 
 
 def count_supported(root: Path) -> Dict[str, int]:
-    counts = {"pdf": 0, "image": 0}
+    counts = {k: 0 for k in ALL_KINDS}
     try:
         for p in root.iterdir():
             k = file_kind(p) if p.is_file() else ""
@@ -1417,9 +1485,21 @@ def count_supported(root: Path) -> Dict[str, int]:
     return counts
 
 
+BIG_FILE_BYTES = 64 * 1024 * 1024
+
+
 def sha1_file(path: Path) -> str:
+    """Content hash. Files over 64 MB (videos, installers, archives) hash their size plus the
+    first and last 8 MB, so a Downloads folder full of ISOs doesn't take minutes."""
     h = hashlib.sha1()
+    size = path.stat().st_size
     with path.open("rb") as f:
+        if size > BIG_FILE_BYTES:
+            h.update(str(size).encode())
+            h.update(f.read(8 * 1024 * 1024))
+            f.seek(size - 8 * 1024 * 1024)
+            h.update(f.read())
+            return "q" + h.hexdigest()[1:]
         while True:
             chunk = f.read(1024 * 1024)
             if not chunk:
@@ -1485,7 +1565,9 @@ def extract_ascii_pdf_strings(path: Path, max_chars: int) -> Tuple[str, str]:
 
 def extract_text_from_pdf(path: Path, max_pages: int, max_chars: int) -> Tuple[str, str]:
     errors: List[str] = []
-    for module, reader_name in (("pypdf", "PdfReader"), ("PyPDF2", "PdfReader")):
+    # testing: SORTLING_NO_PDF_TOOLS=1 behaves like a stock Mac (no pypdf, no pdftotext)
+    no_tools = os.environ.get("SORTLING_NO_PDF_TOOLS") == "1"
+    for module, reader_name in (() if no_tools else (("pypdf", "PdfReader"), ("PyPDF2", "PdfReader"))):
         try:
             reader_cls = getattr(__import__(module), reader_name)
             reader = reader_cls(str(path))
@@ -1505,7 +1587,7 @@ def extract_text_from_pdf(path: Path, max_pages: int, max_chars: int) -> Tuple[s
         except Exception as exc:
             errors.append(f"{module}:{exc}")
 
-    if shutil.which("pdftotext"):
+    if shutil.which("pdftotext") and not no_tools:
         try:
             cmd = ["pdftotext", "-f", "1", "-l", str(max_pages), "-layout", str(path), "-"]
             proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
@@ -1517,11 +1599,332 @@ def extract_text_from_pdf(path: Path, max_pages: int, max_chars: int) -> Tuple[s
     else:
         errors.append("pdftotext:missing")
 
+    # no PDF tools (a stock Mac, a minimal Linux): read the text streams ourselves
+    try:
+        text = builtin_pdf_text(path, max_chars)
+        if readable(text):
+            return text, "builtin-pdf"
+        errors.append("builtin-pdf:no-text")
+    except Exception as exc:
+        errors.append(f"builtin-pdf:{type(exc).__name__}")
+
     text, source = extract_ascii_pdf_strings(path, max_chars=max_chars)
     if text.strip():
         return text[:max_chars], source
     errors.append(source)
     return "", ";".join(errors)
+
+
+def _xml_text(xml: bytes, para_tags: Sequence[bytes]) -> str:
+    """Text content of an Office/OpenDocument XML part, with a newline at each paragraph-like tag."""
+    for tag in para_tags:
+        xml = xml.replace(b"</" + tag + b">", b"\n")
+    text = re.sub(rb"<[^>]+>", b"", xml).decode("utf-8", "replace")
+    for ent, ch in (("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'), ("&apos;", "'"), ("&amp;", "&")):
+        text = text.replace(ent, ch)
+    return re.sub(r"[ \t]+", " ", re.sub(r"\n\s*\n+", "\n", text)).strip()
+
+
+def extract_text_from_doc(path: Path, max_chars: int) -> Tuple[str, str]:
+    """Text from docx/pptx/xlsx, OpenDocument, RTF and plain text, with the standard library only."""
+    import zipfile
+
+    ext = path.suffix.lower()
+    try:
+        if ext in (".txt", ".md", ".markdown"):
+            with path.open("rb") as f:
+                return f.read(max_chars * 4).decode("utf-8", "replace")[:max_chars], "text"
+        if ext == ".rtf":
+            raw = path.read_bytes()[: max_chars * 8].decode("latin-1", "replace")
+            raw = re.sub(r"\\'([0-9a-fA-F]{2})", lambda m: bytes.fromhex(m.group(1)).decode("cp1252", "replace"), raw)
+            raw = re.sub(r"\\par[d]?\b|\\line\b", "\n", raw)
+            raw = re.sub(r"\{\\\*[^{}]*\}|\\[a-zA-Z]+-?\d* ?|[{}]", "", raw)
+            return re.sub(r"\n\s*\n+", "\n", raw).strip()[:max_chars], "rtf"
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+            if ext == ".docx":
+                parts = ["word/document.xml"] + sorted(n for n in names if re.match(r"word/(header|footer)\d*\.xml", n))
+                tags: Sequence[bytes] = (b"w:p",)
+            elif ext == ".pptx":
+                parts = sorted((n for n in names if re.match(r"ppt/slides/slide\d+\.xml$", n)),
+                               key=lambda n: int(re.findall(r"\d+", n)[-1]))
+                tags = (b"a:p",)
+            elif ext == ".xlsx":
+                parts = [n for n in ("xl/sharedStrings.xml",) if n in names] + sorted(n for n in names if n.startswith("xl/worksheets/sheet"))
+                tags = (b"si", b"row")
+            else:  # OpenDocument: odt, odp, ods
+                parts, tags = ["content.xml"], (b"text:p", b"text:h", b"table:table-row")
+            chunks, total = [], 0
+            for part in parts:
+                if part not in names:
+                    continue
+                text = _xml_text(z.read(part), tags)
+                if text:
+                    chunks.append(text)
+                    total += len(text)
+                if total >= max_chars:
+                    break
+            return "\n".join(chunks)[:max_chars], ext.lstrip(".")
+    except Exception as exc:
+        return "", f"{ext.lstrip('.')}:{type(exc).__name__}"
+
+
+_PDF_STRING = re.compile(rb"\((?:\\.|[^\\()]|\((?:\\.|[^\\()])*\))*\)|<[0-9A-Fa-f\s]*>")
+_PDF_ESCAPES = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f", b"(": b"(", b")": b")", b"\\": b"\\"}
+
+
+def _pdf_literal(tok: bytes) -> bytes:
+    """The bytes of a PDF string token: (literal with escapes) or <hex>."""
+    if tok.startswith(b"<"):
+        h = re.sub(rb"\s", b"", tok[1:-1])
+        return bytes.fromhex((h + b"0" * (len(h) % 2)).decode())
+    body, out, i = tok[1:-1], bytearray(), 0
+    while i < len(body):
+        c = body[i:i + 1]
+        if c == b"\\" and i + 1 < len(body):
+            n = body[i + 1:i + 2]
+            if n in _PDF_ESCAPES:
+                out += _PDF_ESCAPES[n]
+                i += 2
+            elif n.isdigit():
+                m = re.match(rb"[0-7]{1,3}", body[i + 1:i + 4])
+                out.append(int(m.group(0), 8) & 0xFF)
+                i += 1 + len(m.group(0))
+            else:
+                i += 2  # line continuation or unknown escape
+        else:
+            out += c
+            i += 1
+    return bytes(out)
+
+
+def _pdf_cmap(data: bytes) -> Dict[bytes, str]:
+    """A ToUnicode CMap: glyph code bytes -> text."""
+    cmap: Dict[bytes, str] = {}
+
+    def uni(hexstr: bytes) -> str:
+        b = bytes.fromhex(hexstr.decode())
+        return b.decode("utf-16-be", "replace")
+
+    for block in re.findall(rb"beginbfchar(.*?)endbfchar", data, re.S):
+        for src, dst in re.findall(rb"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]*)>", block):
+            cmap[bytes.fromhex(src.decode())] = uni(dst)
+    for block in re.findall(rb"beginbfrange(.*?)endbfrange", data, re.S):
+        for lo, hi, dst in re.findall(rb"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(<[0-9A-Fa-f]+>|\[[^\]]*\])", block):
+            a, b, width = int(lo, 16), int(hi, 16), len(lo) // 2
+            if b - a > 5000:
+                continue
+            if dst.startswith(b"["):
+                for k, d in enumerate(re.findall(rb"<([0-9A-Fa-f]+)>", dst)):
+                    cmap[(a + k).to_bytes(width, "big")] = uni(d)
+            else:
+                start = int(dst[1:-1], 16)
+                for k in range(b - a + 1):
+                    cmap[(a + k).to_bytes(width, "big")] = chr(start + k) if start + k < 0x110000 else ""
+    return cmap
+
+
+def _pdf_inflate(head: bytes, raw: bytes) -> Optional[bytes]:
+    """A stream's decoded bytes: Flate or unfiltered only; None for anything else."""
+    import zlib
+
+    if b"/FlateDecode" in head:
+        try:
+            return zlib.decompressobj().decompress(raw)
+        except zlib.error:
+            return None
+    return None if b"/Filter" in head else raw
+
+
+def _pdf_objects(data: bytes) -> Dict[int, Tuple[bytes, Optional[bytes]]]:
+    """Object number -> (dictionary text, decoded stream or None), including objects packed in
+    object streams (PDF 1.5+)."""
+    objs: Dict[int, Tuple[bytes, Optional[bytes]]] = {}
+    for m in re.finditer(rb"(?<![\d])(\d+)\s+\d+\s+obj\b", data):
+        start = m.end()
+        end = data.find(b"endobj", start)
+        if end < 0:
+            continue
+        body = data[start:end]
+        sm = re.search(rb"stream\r?\n", body)
+        if sm and b"endstream" in body[sm.end():]:
+            head = body[:sm.start()]
+            objs[int(m.group(1))] = (head, _pdf_inflate(head, body[sm.end():body.rfind(b"endstream")]))
+        else:
+            objs[int(m.group(1))] = (body, None)
+    for head, raw in list(objs.values()):
+        if raw is None or not re.search(rb"/Type\s*/ObjStm", head):
+            continue
+        first = re.search(rb"/First\s+(\d+)", head)
+        if not first:
+            continue
+        off0 = int(first.group(1))
+        nums = [int(x) for x in raw[:off0].split()]
+        pairs = list(zip(nums[0::2], nums[1::2]))
+        for i, (onum, off) in enumerate(pairs):
+            end = pairs[i + 1][1] if i + 1 < len(pairs) else len(raw) - off0
+            objs.setdefault(onum, (raw[off0 + off:off0 + end], None))
+    return objs
+
+
+def _pdf_ref(text: bytes, key: bytes) -> Optional[int]:
+    m = re.search(rb"/" + key + rb"\s+(\d+)\s+\d+\s+R", text)
+    return int(m.group(1)) if m else None
+
+
+def _pdf_pages(data: bytes, objs: Dict[int, Tuple[bytes, Optional[bytes]]]) -> List[Tuple[int, bytes]]:
+    """(page object, inherited resources text) in reading order, from the catalog's page tree."""
+    roots = re.findall(rb"/Root\s+(\d+)\s+\d+\s+R", data)
+    if not roots or int(roots[-1]) not in objs:
+        return []
+    top = _pdf_ref(objs[int(roots[-1])][0], b"Pages")
+    out: List[Tuple[int, bytes]] = []
+    stack: List[Tuple[int, bytes]] = [(top, b"")] if top else []
+    seen = set()
+    while stack and len(out) < 2000:
+        num, res = stack.pop()
+        if num in seen or num not in objs:
+            continue
+        seen.add(num)
+        node = objs[num][0]
+        here = re.search(rb"/Resources\s*(\d+\s+\d+\s+R|<<.*)", node, re.S)
+        res = node if here else res
+        kids = re.search(rb"/Kids\s*\[(.*?)\]", node, re.S)
+        if kids:
+            refs = [int(k) for k in re.findall(rb"(\d+)\s+\d+\s+R", kids.group(1))]
+            stack.extend((k, res) for k in reversed(refs))
+        elif re.search(rb"/Type\s*/Page\b", node):
+            out.append((num, res))
+    return out
+
+
+def _pdf_fonts(res: bytes, objs: Dict[int, Tuple[bytes, Optional[bytes]]], cache: Dict[int, Dict[bytes, str]]) -> Dict[bytes, Dict[bytes, str]]:
+    """Font resource name -> its ToUnicode map, for one page's resources."""
+    rref = re.search(rb"/Resources\s+(\d+)\s+\d+\s+R", res)
+    if rref and int(rref.group(1)) in objs:
+        res = objs[int(rref.group(1))][0]
+    fref = _pdf_ref(res, b"Font")
+    m = re.search(rb"/Font\s*<<(.*?)>>", res, re.S)
+    fontdict = objs[fref][0] if fref and fref in objs else (m.group(1) if m else b"")
+    fonts: Dict[bytes, Dict[bytes, str]] = {}
+    for name, onum in re.findall(rb"/([^\s/<>\[\]()]+)\s+(\d+)\s+\d+\s+R", fontdict):
+        onum_i = int(onum)
+        if onum_i not in cache:
+            tu = _pdf_ref(objs[onum_i][0], b"ToUnicode") if onum_i in objs else None
+            stream = objs.get(tu, (b"", None))[1] if tu else None
+            cache[onum_i] = _pdf_cmap(stream) if stream else {}
+        fonts[name] = cache[onum_i]
+    return fonts
+
+
+_PDF_OPS = re.compile(
+    rb"(\[(?:[^\[\]]|\((?:\\.|[^\\)])*\))*\])\s*TJ"  # 1: TJ array
+    rb"|(" + _PDF_STRING.pattern + rb")\s*(?:Tj|'|\")"  # 2: one string
+    rb"|/([^\s/\[\]()<>]+)\s+-?[\d.]+\s+Tf"  # 3: font switch
+    rb"|\b(T\*|Tm|BT|ET)\b"  # 4: new line or new position
+    rb"|(-?[\d.]+)\s+(-?[\d.]+)\s+T[dD]\b",  # 5, 6: a move by (tx, ty)
+    re.S,
+)
+
+
+def _pdf_decode(b: bytes, cmap: Dict[bytes, str], widths: Sequence[int]) -> str:
+    if not cmap:
+        return b.decode("latin-1")
+    out, i = [], 0
+    while i < len(b):
+        for w in widths:
+            ch = cmap.get(b[i:i + w])
+            if ch is not None:
+                out.append(ch)
+                i += w
+                break
+        else:
+            out.append(chr(b[i]) if 32 <= b[i] < 127 else "")
+            i += 1
+    return "".join(out)
+
+
+def _pdf_stream_text(stream: bytes, fonts: Dict[bytes, Dict[bytes, str]], max_chars: int) -> List[str]:
+    lines: List[str] = []
+    line: List[str] = []
+    cmap: Dict[bytes, str] = {}
+    widths: List[int] = []
+
+    def flush() -> None:
+        text = re.sub(r"\s+", " ", "".join(line)).strip()
+        if text:
+            lines.append(text)
+        line.clear()
+
+    for op in _PDF_OPS.finditer(stream):
+        if op.group(3) is not None:
+            cmap = fonts.get(op.group(3), {})
+            widths = sorted({len(k) for k in cmap}, reverse=True)
+        elif op.group(1):
+            for tok in re.finditer(_PDF_STRING.pattern + rb"|(-?\d+\.?\d*)", op.group(1)):
+                if tok.group(1):
+                    if float(tok.group(1)) < -200:
+                        line.append(" ")
+                else:
+                    line.append(_pdf_decode(_pdf_literal(tok.group(0)), cmap, widths))
+        elif op.group(2):
+            line.append(_pdf_decode(_pdf_literal(op.group(2)), cmap, widths))
+        elif op.group(6) is not None:
+            # a vertical move starts a new line; a horizontal one (glyph by glyph, as Chrome
+            # writes PDFs) stays on it: real spaces are glyphs of their own
+            if abs(float(op.group(6))) > 0.01:
+                flush()
+        elif op.group(4) in (b"BT", b"ET", b"T*"):
+            flush()
+        elif op.group(4) == b"Tm" and line and not "".join(line).endswith(" "):
+            line.append(" ")
+        if sum(len(x) for x in lines) >= max_chars:
+            break
+    flush()
+    return lines
+
+
+def builtin_pdf_text(path: Path, max_chars: int, max_bytes: int = 40 * 1024 * 1024) -> str:
+    """Rough PDF text with the standard library: unpack object streams, walk the pages in order,
+    read the text operators and decode each font's glyph codes through its own ToUnicode map.
+    Good enough to classify a document, not to reproduce its layout."""
+    data = path.read_bytes()[:max_bytes]
+    objs = _pdf_objects(data)
+    cache: Dict[int, Dict[bytes, str]] = {}
+    lines: List[str] = []
+    for num, res in _pdf_pages(data, objs):
+        page = objs[num][0]
+        contents = re.search(rb"/Contents\s*(\[[^\]]*\]|\d+\s+\d+\s+R)", page)
+        refs = [int(r) for r in re.findall(rb"(\d+)\s+\d+\s+R", contents.group(1))] if contents else []
+        stream = b"\n".join(objs[r][1] or b"" for r in refs if r in objs)
+        if stream:
+            lines += _pdf_stream_text(stream, _pdf_fonts(res, objs, cache), max_chars)
+        if sum(len(x) for x in lines) >= max_chars:
+            break
+    if not lines:
+        # no usable page tree: every text stream in file order, all fonts' maps merged
+        merged: Dict[bytes, str] = {}
+        for head, raw in objs.values():
+            if raw and b"begincmap" in raw:
+                merged.update(_pdf_cmap(raw))
+        for head, raw in objs.values():
+            if raw and re.search(rb"\b(?:Tj|TJ)\b", raw) and b"begincmap" not in raw:
+                lines += _pdf_stream_text(raw, {}, max_chars) if not merged else _pdf_stream_text(
+                    b"/_ 1 Tf " + raw, {b"_": merged}, max_chars)
+            if sum(len(x) for x in lines) >= max_chars:
+                break
+    return "\n".join(lines)[:max_chars]
+
+
+def readable(text: str) -> bool:
+    """Real text rather than glyph-code garbage: mostly letters, digits, spaces and everyday
+    punctuation, with a fair share of letters. Invoices and statements are full of digits and
+    symbols, so those count as good."""
+    if len(text) < 40:
+        return False
+    good = sum(ch.isalnum() or ch.isspace() or ch in ".,:;!?$%#@&*+-=/\\()[]'\"_€£¥₹" for ch in text)
+    letters = sum(ch.isalpha() for ch in text)
+    return good / len(text) >= 0.85 and letters / len(text) >= 0.25
 
 
 def render_first_page_png_base64(path: Path, max_dim: int = 1100) -> Tuple[Optional[str], str]:
@@ -1602,12 +2005,14 @@ def load_image_base64(path: Path) -> Tuple[Optional[str], str, str]:
 def build_state(filename: str, kind: str, text_excerpt: str, has_image: bool) -> str:
     if kind == "pdf":
         what = "PDF document" + (", first page shown above" if has_image else "")
+    elif kind == "doc":
+        what = f"{Path(filename).suffix.lstrip('.').upper() or 'text'} document"
     else:
         what = "image file (screenshot, photo or scan)" + (", shown above" if has_image else ", not shown")
     lines = [f"Filename: {filename}", f"File type: {what}"]
     if text_excerpt:
         lines += ["Extracted text (may be noisy):", text_excerpt]
-    elif kind == "pdf":
+    elif kind in ("pdf", "doc"):
         lines.append("Extracted text: none")
     return "\n".join(lines)
 
@@ -1767,6 +2172,10 @@ def prepare_input(path: Path, opts: RunOptions) -> FileInput:
                 extractor = f"{extractor};{vision_source}"
         if weak_text and image_b64 is not None:
             text = ""
+    elif kind == "doc":
+        text, extractor = extract_text_from_doc(path, opts.max_chars)
+    elif kind == "file":
+        text, extractor = "", "extension"
     else:
         # images are classified from the pixels; there is no OCR step
         text, extractor = "", "image"
@@ -1804,7 +2213,7 @@ def classify(backend: Backend, fi: FileInput, opts: RunOptions) -> Tuple[Routed,
 
 def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None) -> List[DocRecord]:
     root = opts.root
-    source_files = list_source_files(root, opts.recursive, opts.kinds, sorted_roots(opts.profile))
+    source_files = list_source_files(root, opts.recursive, opts.kinds, opts.profile)
     if not source_files:
         return []
 
@@ -1826,7 +2235,14 @@ def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None
             classifier = opts.status if backend is None else f"{backend.mode}:{backend.name}"
 
         is_uncertain = False
-        if backend is not None:
+        rule_folder = file_folder(opts.profile, path) if fi.kind == "file" else ""
+        if fi.kind == "doc" and not readable(fi.text):
+            # a document we couldn't read: sort it by its extension instead
+            rule_folder = f"{FILES_FOLDER}/documents" if opts.profile.layout != "custom" else opts.profile.extensions.get(path.suffix.lower(), REVIEW_FOLDER)
+        if rule_folder:
+            routed = Routed(f"file:{rule_folder.rsplit('/', 1)[-1]}", "keep", rule_folder, 1.0, f"rule:extension {path.suffix.lower()}")
+            classifier = "rule:extension"
+        elif backend is not None:
             routed, err = classify(backend, fi, opts)
             is_uncertain = err is None and routed.uncertain
             if err is not None:
@@ -2319,7 +2735,10 @@ def describe_counts(path: Path) -> str:
     if not path.is_dir():
         return "not found"
     c = count_supported(path)
-    return f"{c['image']} images, {c['pdf']} PDFs"
+    parts = [f"{c['image']} images", f"{c['pdf']} PDFs"]
+    if c["doc"] or c["file"]:
+        parts += [f"{c['doc']} documents", f"{c['file']} other files"]
+    return ", ".join(parts)
 
 
 def create_profile_wizard(cfg_file: Path) -> Profile:
@@ -2536,15 +2955,15 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
     desktop = Path.home() / "Desktop"
     targets: List[tuple] = [
         (f"Screenshots   {describe_counts(shots)}", (shots, ("image",)), f"{shots} · images only"),
-        (f"Downloads     {describe_counts(downloads)}", (downloads, ("pdf", "image")), str(downloads)),
+        (f"Downloads     {describe_counts(downloads)}", (downloads, ALL_KINDS), str(downloads)),
     ]
     if desktop != shots:
-        targets.append((f"Desktop       {describe_counts(desktop)}", (desktop, ("pdf", "image")), str(desktop)))
+        targets.append((f"Desktop       {describe_counts(desktop)}", (desktop, ALL_KINDS), str(desktop)))
     targets.append(("Another folder...", None, "type a path; Tab completes"))
     picked = ask_choice("What do you want to tidy?", targets)
     if picked is None:
         root = Path(ask("  folder path", paths=True)).expanduser()
-        kinds: Tuple[str, ...] = ("pdf", "image")
+        kinds: Tuple[str, ...] = ALL_KINDS
         print()
     else:
         root, kinds = picked  # type: ignore[misc]
@@ -2679,7 +3098,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("-i", "--interactive", action="store_true", help="Force the interactive wizard")
     p.add_argument("--apply", action="store_true", help="Apply moves/deletes. Default is dry-run")
     p.add_argument("--undo", metavar="MANIFEST", help="Move files from an applied manifest back")
-    p.add_argument("--types", default="pdf,image", help="Comma-separated file kinds: pdf, image (default: pdf,image)")
+    p.add_argument("--types", default=",".join(ALL_KINDS),
+                   help="Comma-separated kinds: pdf, image, doc (Office/text, read and asked about), file (sorted by extension). Default: all")
     p.add_argument("--recursive-source", action="store_true", help="Also sort files in subfolders (not already-sorted ones)")
     p.add_argument("--profile", default="", help="Sorting profile: default, photos, or one saved in the config")
     p.add_argument("--profile-file", default="", metavar="JSON",
@@ -2731,6 +3151,10 @@ def profile_payload(profile: Profile, flags: dict) -> dict:
     out["questions"] = profile.spec.get("questions", {})
     if "category_aliases" in profile.spec:
         out["category_aliases"] = profile.spec["category_aliases"]
+    if profile.spec.get("files"):
+        out["files"] = profile.spec["files"]
+    if profile.extensions:
+        out["extensions"] = profile.extensions
     return out
 
 
@@ -2815,8 +3239,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"error: invalid root directory: {root}", file=sys.stderr)
         return 2
     kinds = tuple(k.strip() for k in args.types.split(",") if k.strip())
-    if not kinds or any(k not in ("pdf", "image") for k in kinds):
-        print(f"error: --types must be a comma-separated subset of pdf,image: {args.types}", file=sys.stderr)
+    if not kinds or any(k not in ALL_KINDS for k in kinds):
+        print(f"error: --types must be a comma-separated subset of {','.join(ALL_KINDS)}: {args.types}", file=sys.stderr)
         return 2
     try:
         profile = resolve_profile(args, cfg, root)

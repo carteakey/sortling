@@ -1,71 +1,122 @@
 {
-  "_about": "Right folder per fixture, per profile. A list means any of these is right. Built by make_fixtures.sh.",
-  "docs": {
-    "default": {
-      "IMG_20261003_receipt.jpg": "docs/finance",
-      "IMG_20261003_receipt (2).jpg": "_duplicates",
-      "Screenshot from 2026-10-08 14-22-07.png": "screenshots/code",
-      "Screenshot_20261012-091500.png": "docs/travel",
-      "cnn_lecture4_notes.pdf": ["docs/learning", "docs/learning/archive"],
-      "funny.webp": "memes",
-      "scanned_lab_report.pdf": "docs/medical"
-    }
-  },
-  "docs-neutral": {
-    "default": {
-      "file01.pdf": ["docs/learning", "docs/learning/archive"],
-      "file02.webp": "memes",
-      "file03.jpg": "docs/finance",
-      "file04.pdf": "docs/medical",
-      "file05.png": "docs/travel",
-      "file06.png": "screenshots/code"
-    }
+ "_about": "Right folder per fixture, per profile. A list means any of these is right. Built by make_fixtures.sh. null means the file must be left alone (not in the plan).",
+ "docs": {
+  "default": {
+   "IMG_20261003_receipt.jpg": "docs/finance",
+   "IMG_20261003_receipt (2).jpg": "_duplicates",
+   "Screenshot from 2026-10-08 14-22-07.png": "screenshots/code",
+   "Screenshot_20261012-091500.png": "docs/travel",
+   "cnn_lecture4_notes.pdf": [
+    "docs/learning",
+    "docs/learning/archive"
+   ],
+   "funny.webp": "memes",
+   "scanned_lab_report.pdf": "docs/medical"
+  }
+ },
+ "docs-neutral": {
+  "default": {
+   "file01.pdf": [
+    "docs/learning",
+    "docs/learning/archive"
+   ],
+   "file02.webp": "memes",
+   "file03.jpg": "docs/finance",
+   "file04.pdf": "docs/medical",
+   "file05.png": "docs/travel",
+   "file06.png": "screenshots/code"
+  }
+ },
+ "photos": {
+  "default": {
+   "p1011.jpg": [
+    "photos/people",
+    "photos/places"
+   ],
+   "p1025.jpg": "photos/pets",
+   "p1062.jpg": "photos/pets",
+   "p237.jpg": "photos/pets",
+   "p1039.jpg": "photos/places",
+   "p1047.jpg": "photos/places",
+   "p1080.jpg": "photos/food",
+   "p292.jpg": "photos/food",
+   "p429.jpg": "photos/food",
+   "p1059.jpg": "photos/other",
+   "IMG-20261003-WA0012.jpg": "memes",
+   "IMG-20261005-WA0003.jpg": "memes",
+   "IMG-20261006-WA0021.jpg": "memes",
+   "IMG_20261007_101512.jpg": "_delete",
+   "IMG_20261008_224401.jpg": "_delete",
+   "IMG_20261009_183000.jpg": "docs/finance",
+   "Screenshot_20261010.png": "screenshots/code"
   },
   "photos": {
-    "default": {
-      "p1011.jpg": ["photos/people", "photos/places"],
-      "p1025.jpg": "photos/pets",
-      "p1062.jpg": "photos/pets",
-      "p237.jpg": "photos/pets",
-      "p1039.jpg": "photos/places",
-      "p1047.jpg": "photos/places",
-      "p1080.jpg": "photos/food",
-      "p292.jpg": "photos/food",
-      "p429.jpg": "photos/food",
-      "p1059.jpg": "photos/other",
-      "IMG-20261003-WA0012.jpg": "memes",
-      "IMG-20261005-WA0003.jpg": "memes",
-      "IMG-20261006-WA0021.jpg": "memes",
-      "IMG_20261007_101512.jpg": "_delete",
-      "IMG_20261008_224401.jpg": "_delete",
-      "IMG_20261009_183000.jpg": "docs/finance",
-      "Screenshot_20261010.png": "screenshots/code"
-    },
-    "photos": {
-      "p1011.jpg": ["photos/people", "photos/places"],
-      "p1025.jpg": "photos/pets",
-      "p1062.jpg": "photos/pets",
-      "p237.jpg": "photos/pets",
-      "p1039.jpg": "photos/places",
-      "p1047.jpg": "photos/places",
-      "p1080.jpg": "photos/food",
-      "p292.jpg": "photos/food",
-      "p429.jpg": "photos/food",
-      "p1059.jpg": "photos/other",
-      "IMG-20261003-WA0012.jpg": "memes",
-      "IMG-20261005-WA0003.jpg": "memes",
-      "IMG-20261006-WA0021.jpg": "memes",
-      "IMG_20261007_101512.jpg": "_delete",
-      "IMG_20261008_224401.jpg": "_delete",
-      "IMG_20261009_183000.jpg": "docs",
-      "Screenshot_20261010.png": "screenshots"
-    }
-  },
-  "charts": {
-    "default": {
-      "bandwidth_chart.png": ["docs/learning", "docs/work"],
-      "fig3.png": ["docs/learning", "docs/work"],
-      "cheatsheet.jpg": ["docs/learning", "docs/learning/archive"]
-    }
+   "p1011.jpg": [
+    "photos/people",
+    "photos/places"
+   ],
+   "p1025.jpg": "photos/pets",
+   "p1062.jpg": "photos/pets",
+   "p237.jpg": "photos/pets",
+   "p1039.jpg": "photos/places",
+   "p1047.jpg": "photos/places",
+   "p1080.jpg": "photos/food",
+   "p292.jpg": "photos/food",
+   "p429.jpg": "photos/food",
+   "p1059.jpg": "photos/other",
+   "IMG-20261003-WA0012.jpg": "memes",
+   "IMG-20261005-WA0003.jpg": "memes",
+   "IMG-20261006-WA0021.jpg": "memes",
+   "IMG_20261007_101512.jpg": "_delete",
+   "IMG_20261008_224401.jpg": "_delete",
+   "IMG_20261009_183000.jpg": "docs",
+   "Screenshot_20261010.png": "screenshots"
   }
+ },
+ "charts": {
+  "default": {
+   "bandwidth_chart.png": [
+    "docs/learning",
+    "docs/work"
+   ],
+   "fig3.png": [
+    "docs/learning",
+    "docs/work"
+   ],
+   "cheatsheet.jpg": [
+    "docs/learning",
+    "docs/learning/archive"
+   ]
+  }
+ },
+ "files": {
+  "default": {
+   "invoice-oct.docx": "docs/finance",
+   "lecture-07.pptx": [
+    "docs/learning",
+    "docs/learning/archive"
+   ],
+   "statement-sept.xlsx": "docs/finance",
+   "lease-agreement.rtf": "docs/legal",
+   "rx-notes.txt": "docs/medical",
+   "lisbon-trip.md": "docs/travel",
+   "offer-letter.pdf": [
+    "docs/work",
+    "docs/personal"
+   ],
+   "project-src.zip": "files/archives",
+   "Installer-4.2.dmg": "files/installers",
+   "song.mp3": "files/audio",
+   "clip.mp4": "files/video",
+   "novel.epub": "files/ebooks",
+   "Inter.ttf": "files/fonts",
+   "cleanup.py": "files/code",
+   "sales.csv": "files/data",
+   "ubuntu.torrent": "files/torrents",
+   "bracket.stl": "files/3d",
+   "big.iso.crdownload": null,
+   ".DS_Store": null,
+   "notes.xyz": null
+  }
+ }
 }

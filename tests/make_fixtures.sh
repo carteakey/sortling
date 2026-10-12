@@ -115,4 +115,52 @@ if [ ! -d "$C" ]; then
     "$C/cheatsheet.jpg"
   echo "built $C"
 fi
+# --- files: Office/text documents (read and asked about), extension-sorted files, files left alone ---
+F="$OUT/files"
+if [ ! -d "$F" ]; then
+  mkdir -p "$F"
+  python3 -I - "$F" <<'PY'
+import sys, zipfile, zlib, os
+out = sys.argv[1]
+def office(name, parts):
+    with zipfile.ZipFile(os.path.join(out, name), "w", zipfile.ZIP_DEFLATED) as z:
+        for part, body in parts.items():
+            z.writestr(part, body)
+def wp(lines):  # WordprocessingML paragraphs
+    return '<?xml version="1.0"?><w:document xmlns:w="w"><w:body>' + "".join(f"<w:p><w:r><w:t>{l}</w:t></w:r></w:p>" for l in lines) + "</w:body></w:document>"
+office("invoice-oct.docx", {"word/document.xml": wp(["INVOICE #4471", "Northwind Hosting Ltd.", "Bill to: K. Chauhan", "Dedicated server, October 2026: $89.00", "HST 13%: $11.57", "Total due: $100.57 by 2026-11-01"])})
+office("lecture-07.pptx", {f"ppt/slides/slide{i}.xml": f'<p:sld xmlns:a="a" xmlns:p="p"><a:p><a:t>{t}</a:t></a:p></p:sld>' for i, t in enumerate(
+    ["CS 480 Lecture 7: Attention and Transformers", "Scaled dot-product attention: softmax(QK^T / sqrt(d)) V", "Multi-head attention and positional encodings", "Reading: Vaswani et al. 2017"], start=1)})
+office("statement-sept.xlsx", {"xl/sharedStrings.xml": '<sst><si><t>Chequing account statement</t></si><si><t>September 2026</t></si><si><t>Opening balance 2,410.22</t></si><si><t>Payroll deposit 3,850.00</t></si><si><t>Rent payment -1,950.00</t></si><si><t>Closing balance 4,310.22</t></si></sst>'})
+open(os.path.join(out, "lease-agreement.rtf"), "w").write(r"{\rtf1\ansi {\b RESIDENTIAL LEASE AGREEMENT}\par This lease is made between the Landlord and the Tenant for the premises at 12 Elm St, Unit 4.\par Term: 12 months from 2026-11-01. Rent: $1,950 per month.\par Signed by both parties.\par}")
+open(os.path.join(out, "rx-notes.txt"), "w").write("Prescription\nPatient: K. Chauhan\nRx: Amoxicillin 500 mg, three times daily for 7 days\nPrescribed by Dr. A. Patel, family medicine\nRefills: 0\n")
+open(os.path.join(out, "lisbon-trip.md"), "w").write("# Lisbon trip itinerary\n\n- Flight TP 258 YYZ -> LIS, 14 Nov 2026, 21:40\n- Hotel: Casa do Bairro, check-in 15 Nov\n- Day 2: Belem tower, LX Factory\n- Return flight 21 Nov\n")
+# a PDF whose text is Flate-compressed, like nearly every real PDF: exercises the built-in reader
+text = ["EMPLOYMENT OFFER LETTER", "Dear Kartikey,", "We are pleased to offer you the position of Senior Data Engineer", "starting 2026-12-01 at an annual salary of $142,000.", "Please sign and return by 2026-11-15."]
+content = zlib.compress(("BT /F1 13 Tf 60 760 Td 18 TL " + " ".join("(%s) '" % l for l in text) + " ET").encode())
+objs = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d /Filter /FlateDecode >>\nstream\n" % len(content) + content + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+pdf, offs = b"%PDF-1.4\n", []
+for i, o in enumerate(objs, 1):
+    offs.append(len(pdf)); pdf += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+x = len(pdf)
+pdf += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1) + b"".join(b"%010d 00000 n \n" % o for o in offs)
+pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, x)
+open(os.path.join(out, "offer-letter.pdf"), "wb").write(pdf)
+# sorted by extension, no model
+with zipfile.ZipFile(os.path.join(out, "project-src.zip"), "w") as z:
+    z.writestr("main.py", "print('hi')\n")
+for name, data in {"Installer-4.2.dmg": b"koly" + os.urandom(2000), "song.mp3": b"ID3" + os.urandom(3000),
+                   "clip.mp4": b"\x00\x00\x00\x18ftypmp42" + os.urandom(3000), "novel.epub": b"PK\x03\x04epub" + os.urandom(500),
+                   "Inter.ttf": b"\x00\x01\x00\x00" + os.urandom(800), "cleanup.py": b"import os\nprint(os.listdir('.'))\n",
+                   "sales.csv": b"month,revenue\n2026-08,1200\n2026-09,1350\n", "ubuntu.torrent": b"d8:announce35:udp://tracker.example:80e",
+                   "bracket.stl": b"solid bracket\nendsolid bracket\n",
+                   # left alone: an unfinished download, a hidden file, an unknown extension
+                   "big.iso.crdownload": os.urandom(1000), ".DS_Store": os.urandom(100), "notes.xyz": b"whatever"}.items():
+    open(os.path.join(out, name), "wb").write(data)
+PY
+  echo "built $F"
+fi
 echo "fixtures ready in $OUT"
