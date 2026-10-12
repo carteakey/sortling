@@ -19,15 +19,16 @@ curl -O https://raw.githubusercontent.com/carteakey/sortling/main/sortling.py
 python3 sortling.py
 ```
 
-Run with no arguments and it asks three things:
+Run with no arguments and the wizard greets you, then asks three things. The menus
+take arrow keys and Enter, and typing filters long lists:
 
 1. **What to tidy:** your screenshots folder (on macOS it reads the real location from
    `defaults read com.apple.screencapture location`, which defaults to the Desktop),
    Downloads, Desktop, or any folder.
 2. **How to sort:** the built-in layout, or your own folders, each with a one-line
    description. You can save custom profiles for next time.
-3. **Which model:** ⚡ fast or 🐢 thorough (below). Hosted models warn before anything
-   is uploaded.
+3. **Which model:** ⚡ fast, 🐢 thorough or ⚡🐢 hybrid (below). Hosted models warn
+   before anything is uploaded. "⚙ set up models…" at the bottom adds new ones.
 
 Then it shows the plan ("12 → screenshots/code, 3 → _review …") and moves nothing until
 you say yes. Every applied run prints an undo command.
@@ -122,6 +123,22 @@ summary) as JSON on stdout. [SORTLING.md](SORTLING.md) is a guide to hand an age
 to run sortling with custom categories, read the output, and the safety rules
 (dry run first, confirm, keep the undo command).
 
+## Setting up models
+
+`python3 sortling.py --setup` (or "⚙ set up models…" in the wizard) adds and manages
+models interactively:
+
+- **Pick a kind:** a local decision model (llama.cpp / llama-swap), TypeSafe Jev, a
+  local chat model (llama-swap, Ollama, LM Studio, vLLM), a hosted chat model (OpenAI,
+  OpenRouter, any OpenAI-compatible API), or a hybrid of two you already have.
+- **Pick the model from a list:** sortling asks the server's `/v1/models`, so you
+  choose instead of typing ids. Behind llama-swap it finds the right
+  `/upstream/<model>/v1/systemone` address by testing it.
+- **Test, save, make default:** each model is tried before it's saved. Built-in
+  entries you don't use can be hidden.
+- **Keys stay in environment variables:** setup asks for the variable's name
+  (`LLAMA_SWAP_API_KEY`, `OPENAI_API_KEY`…), never the key.
+
 ## Config
 
 `~/.config/sortling/config.json` (or `$XDG_CONFIG_HOME`). Create a starter file with
@@ -171,7 +188,10 @@ Useful flags:
 - `--min-confidence` (0.6), `--screenshot-min-confidence` (0.4), `--delete-min-prob` (0.85)
 - `--delete-exact-duplicates`, `--hard-delete-delete-candidates`: real deletes, off by default
 - `--disable-llm`: filename keywords only
-- `--vision-mode off|auto|always`, `--timeout-s`, `--no-progress`, `--no-banner`
+- `--setup`: add, test and choose models, then exit
+- `--vision-mode off|auto|always`, `--timeout-s`, `--no-progress`, `--no-banner`, `--no-face`
+- `SORTLING_MENUS=numbers`: numbered prompts instead of arrow-key menus (automatic
+  when input isn't a terminal)
 
 If a model is unreachable, rejects the key, or keeps timing out, sortling falls back to
 filename keywords and records why in `PRECHECK` and in each record's `classifier`.
@@ -218,7 +238,8 @@ The pixel wizard lives in [`assets/`](assets/):
   <img src="assets/poses/sortling_success.png" alt="the wizard cheering beside a folder with a check mark" width="190">
 </p>
 
-The terminal face is packed into `sortling.py` from `assets/faces/head-*.png` by
-`python3 tools/encode_faces.py` (needs ImageMagick; 34×28 px, about 10 KB). Re-run it
+The terminal face (from `assets/faces/head-*.png`, 34×28 px) and the banner hero (from
+`assets/poses/sortling_idle.png`, 38 px wide) are packed into `sortling.py` by
+`python3 tools/encode_faces.py` (needs ImageMagick; about 12 KB together). Re-run it
 after changing the heads; `SORTLING_FACE=force` draws the face even without a terminal,
 for checking.

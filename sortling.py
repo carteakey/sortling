@@ -197,8 +197,23 @@ def color(text: str, code: str) -> str:
 
 
 def print_banner() -> None:
-    print(color(BANNER_ART, "36"))
-    print(color(f"  tidy screenshots, downloads and documents with decision models  v{__version__}", "2"))
+    tagline = f"tidy screenshots, downloads and documents with decision models  v{__version__}"
+    mode = face_mode(sys.stdout) if HERO_DATA else ""
+    forced = os.environ.get("SORTLING_FACE", "").lower() == "force"
+    art = BANNER_ART.strip("\n").split("\n")
+    hero_w = load_hero()["w"] if mode else 0
+    if not mode or (not forced and shutil.get_terminal_size((80, 24)).columns < hero_w + max(map(len, art)) + 6):
+        print(color(BANNER_ART, "36"))
+        print(color(f"  {tagline}", "2"))
+        print()
+        return
+    # the hero beside the lettering, vertically centred, tagline underneath
+    hero = render_face("hero", False, mode == "truecolor", load_hero())
+    pad = max(0, (len(hero) - len(art)) // 2)
+    side = [""] * pad + [color(line, "36") for line in art]
+    for i, row in enumerate(hero):
+        print(f"  {row}  {side[i] if i < len(side) else ''}")
+    print(color(f"  {tagline}", "2"))
     print()
 
 
@@ -372,25 +387,52 @@ FACES_DATA = (
     "751DzyqfMcMpNMsPRIZ//qmi4L///X+kacan"
 )
 # --- FACES END
+# --- HERO BEGIN
+HERO_DATA = (
+    "eNqNlF1vozgUhv8L173gO07v/IVxE9rYaZrCai6IA3iUXbEaRgJpNP99j0mm7XabnSIhnOg857zn9bF/eKN3G6Ebz8InuvH+"
+    "rv9svn9vvNs/vDD1jd94N97Cj4IQwWIZxSg8wiJdRlFgYJGEYRzUsKibJI1iWDSLpQnd4nhc1FEAC2PSOnJ4jAIzB4dtEAUR"
+    "LFAc1WHrFs0iTl1MuzCHxJVIorAOFy5zmqah7xKmh2jpguFzXLp/WkgduYTHpk4iR0VpeK6eLJMgcnjrm/awnIuGSTCLT9M4"
+    "duJb1CyPqdNsjrWZg00bNnMtg1AQzF2YwyGYe1+adDG7gY6JEx+huIkSV6tFQRJ4X4D/Vv/VDN7tD88233rv1sOfeZRkBHP8"
+    "yYcQVeYUnwRV/ecAVUqqToJ05acYOhYu/x3EM4ZHYH6njXM8li4/MCPF3Qjf/42nv/Q4jmG5Yri4I9eBNR5dfAFy/AdgGBsH"
+    "Cgzw/EoPTktZcMK3zBYUj+MKqx60FYyoj4jhjqpZC81I8cjHEzCD+z/D3e6dtB30C3mwcr2CKKn5VDySCRfvc7PZh95p5wQ8"
+    "hRqUjYgSW+R8AmOBx/9mcngz0sk1VoAozkl3gj7dD6Sokq5m9lbMZYY2bNyRmdG7fdYVUKugtOuhhtwA85I/I+aRjM4jx/QQ"
+    "391zbZ65PTHnAe56iHd1fnlrHgToPfvqmOGJ66HOSX/IRv+yl3JFQNtL/8R/5Lif+6cj2rAphvjRwFuLKa5w55gxo+Nu9Tqo"
+    "Pog/9wPMfY79SkwzY4Q1WzrPV0FnzW+2+sU/3TfA6XMdqYG5x2oH81vC3CByOQyQH+bg/NwL6/zirkbDprIGpgIPYd46qCXf"
+    "1JFrodEaY19zhfbc8kNuY2B7p+2yVwo8l6/CJpeXA2eeXf5Moa3oUJVNps7GAeKHDHoB/3YvDuQWeu38PdNz34dL/xr8bgUe"
+    "VjA7sDdqTV/P117Y4ZltcSW0dB5ffO63mS0t7MmGqH71btj3sN8628pO6NNeaFzlHXitT51QA6Hjx2dQaL4V5NRJjB74hPdu"
+    "QsSWW6mGqweXTagSZFdmFs4U2VmoUUkL71VmaKXebXLbazxhmMuyyyfUSipB3+6KrpOV+lSfZ6s3uUV7Sc5MPpUfXIhlK0E3"
+    "mwZzmUnYw/g+s6ibmRH9B8m+YusYbs8zfJnJTaa7J7GVFfvAswziBeYE9rBhyt8KYLntXJ5S6CsX5PmubWEun+CerITtYR6H"
+    "0uX5zSW8Pu8br9gHPnk/f/4Da8lAew=="
+)
+# --- HERO END
 
-_FACES: Optional[dict] = None
+_SPRITES: Dict[str, dict] = {}
+
+
+def _unpack(data: Sequence[str]) -> dict:
+    """{"w", "h", "frames": {name: [[rgb or None] * w] * h}} from a packed sprite block."""
+    import zlib
+
+    blob = json.loads(zlib.decompress(base64.b64decode("".join(data))))
+    palette = [None] + [tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) for c in blob["palette"]]
+    w, h = blob["w"], blob["h"]
+    frames = {}
+    for name, packed in blob["frames"].items():
+        px = base64.b64decode(packed)
+        frames[name] = [[palette[px[y * w + x]] for x in range(w)] for y in range(h)]
+    return {"w": w, "h": h, "frames": frames}
 
 
 def load_faces() -> dict:
-    """{"w", "h", "frames": {name: [[rgb or None] * w] * h}} decoded from FACES_DATA."""
-    global _FACES
-    if _FACES is None:
-        import zlib
+    if "faces" not in _SPRITES:
+        _SPRITES["faces"] = _unpack(FACES_DATA)
+    return _SPRITES["faces"]
 
-        blob = json.loads(zlib.decompress(base64.b64decode("".join(FACES_DATA))))
-        palette = [None] + [tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) for c in blob["palette"]]
-        w, h = blob["w"], blob["h"]
-        frames = {}
-        for name, data in blob["frames"].items():
-            px = base64.b64decode(data)
-            frames[name] = [[palette[px[y * w + x]] for x in range(w)] for y in range(h)]
-        _FACES = {"w": w, "h": h, "frames": frames}
-    return _FACES
+
+def load_hero() -> dict:
+    if "hero" not in _SPRITES:
+        _SPRITES["hero"] = _unpack(HERO_DATA)
+    return _SPRITES["hero"]
 
 
 def _xterm256(rgb: Tuple[int, int, int]) -> int:
@@ -398,9 +440,9 @@ def _xterm256(rgb: Tuple[int, int, int]) -> int:
     return 16 + 36 * r + 6 * g + b
 
 
-def render_face(name: str, mirror: bool, truecolor: bool) -> List[str]:
+def render_face(name: str, mirror: bool, truecolor: bool, sprites: Optional[dict] = None) -> List[str]:
     """One string per terminal row: two pixel rows per row with half-block characters."""
-    faces = load_faces()
+    faces = sprites or load_faces()
     rows = faces["frames"][name]
     if mirror:
         rows = [list(reversed(r)) for r in rows]
@@ -662,9 +704,13 @@ def load_config(path: Path) -> dict:
     if path.exists():
         user = json.loads(path.read_text(encoding="utf-8"))
         cfg["default_backend"] = user.get("default_backend", cfg["default_backend"])
-        # user entries replace built-in ones of the same name
+        # user entries replace built-in ones of the same name; hidden ones are dropped
         cfg["backends"].update(user.get("backends", {}))
         cfg["profiles"].update(user.get("profiles", {}))
+        for name in user.get("hidden_backends", []):
+            cfg["backends"].pop(name, None)
+        if cfg["default_backend"] not in cfg["backends"] and cfg["backends"]:
+            cfg["default_backend"] = next(iter(cfg["backends"]))
     return cfg
 
 
@@ -678,7 +724,7 @@ def save_config(path: Path, cfg: dict) -> None:
 def read_user_config(path: Path) -> dict:
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
-    return {"default_backend": DEFAULT_CONFIG["default_backend"], "backends": {}, "profiles": {}}
+    return {"backends": {}, "profiles": {}}
 
 
 def is_hosted_url(url: str) -> bool:
@@ -1850,30 +1896,217 @@ def summarize(records: Sequence[DocRecord]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def ask(prompt: str, default: str = "") -> str:
+def ask(prompt: str, default: str = "", paths: bool = False) -> str:
     suffix = f" [{default}]" if default else ""
+    restore = _enable_path_completion() if paths else None
     try:
         value = input(f"{prompt}{suffix}: ").strip()
     except EOFError:
         raise KeyboardInterrupt
+    finally:
+        if restore:
+            restore()
     return value or default
 
 
-def ask_choice(title: str, options: Sequence[Tuple[str, object]], default: int = 1) -> object:
-    print(color(title, "1"))
-    for i, (label, _) in enumerate(options, start=1):
-        print(f"  {i}) {label}")
-    while True:
-        raw = ask("  choose", str(default))
-        if raw.isdigit() and 1 <= int(raw) <= len(options):
-            print()
-            return options[int(raw) - 1][1]
-        print("  enter a number from the list")
+def _enable_path_completion() -> Optional[Callable[[], None]]:
+    """Tab-completes paths in input() where readline exists (macOS, Linux)."""
+    try:
+        import glob
+        import readline
+    except ImportError:
+        return None
+    old_completer, old_delims = readline.get_completer(), readline.get_completer_delims()
+
+    def complete(text: str, state: int) -> Optional[str]:
+        matches = [m + ("/" if os.path.isdir(m) else "") for m in glob.glob(os.path.expanduser(text) + "*")]
+        return matches[state] if state < len(matches) else None
+
+    readline.set_completer_delims("\t\n;")
+    readline.set_completer(complete)
+    readline.parse_and_bind("tab: complete")
+
+    def restore() -> None:
+        readline.set_completer(old_completer)
+        readline.set_completer_delims(old_delims)
+
+    return restore
 
 
 def ask_yes(prompt: str, default: bool = False) -> bool:
     raw = ask(f"{prompt} ({'Y/n' if default else 'y/N'})", "").lower()
     return default if not raw else raw.startswith("y")
+
+
+def menus_supported() -> bool:
+    if os.environ.get("SORTLING_MENUS", "").lower() in ("0", "off", "numbers"):
+        return False
+    if not (sys.stdin.isatty() and sys.stdout.isatty()) or os.environ.get("TERM", "dumb") in ("", "dumb"):
+        return False
+    try:
+        import termios  # noqa: F401
+        return True
+    except ImportError:
+        try:
+            import msvcrt  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
+
+class _RawKeys:
+    """Reads single keys: 'up', 'down', 'enter', 'esc', 'backspace', or the character."""
+
+    def __enter__(self) -> "_RawKeys":
+        self.win = False
+        try:
+            import termios
+            import tty
+
+            self.fd = sys.stdin.fileno()
+            self.old = termios.tcgetattr(self.fd)
+            tty.setcbreak(self.fd)
+        except ImportError:
+            self.win = True
+        return self
+
+    def __exit__(self, *exc) -> None:
+        if not self.win:
+            import termios
+
+            termios.tcsetattr(self.fd, termios.TCSADRAIN, self.old)
+
+    def read(self) -> str:
+        if self.win:
+            import msvcrt
+
+            ch = msvcrt.getwch()
+            if ch in ("\x00", "\xe0"):
+                return {"H": "up", "P": "down"}.get(msvcrt.getwch(), "")
+        else:
+            import select
+
+            ch = os.read(self.fd, 1).decode("utf-8", "replace")
+            if ch == "\x1b":
+                seq = ""
+                while select.select([self.fd], [], [], 0.03)[0]:
+                    seq += os.read(self.fd, 1).decode("utf-8", "replace")
+                if not seq:
+                    return "esc"
+                return {"[A": "up", "[B": "down", "OA": "up", "OB": "down", "[5~": "pgup", "[6~": "pgdn"}.get(seq, "")
+        if ch in ("\r", "\n"):
+            return "enter"
+        if ch == "\x03":
+            raise KeyboardInterrupt
+        if ch in ("\x7f", "\x08"):
+            return "backspace"
+        return ch
+
+
+def _visible(text: str) -> str:
+    return re.sub(r"\033\[[0-9;]*m", "", text)
+
+
+def _fit(text: str, width: int) -> str:
+    plain = _visible(text)
+    return text if len(plain) <= width else plain[: max(1, width - 1)] + "…"
+
+
+def _filtered(options: Sequence[Tuple[str, object]], query: str) -> List[Tuple[str, object]]:
+    """Options containing the query; labels that start with it first, then word starts."""
+    if not query:
+        return list(options)
+    q = query.lower()
+
+    def rank(label: str) -> int:
+        text = _visible(label).lower().lstrip(" *★⚡🐢☁⌂+")
+        if text.startswith(q):
+            return 0
+        return 1 if re.search(r"(^|[\s/_-])" + re.escape(q), text) else 2
+
+    hits = [(rank(o[0]), i, o) for i, o in enumerate(options) if q in _visible(o[0]).lower()]
+    return [o for _, _, o in sorted(hits, key=lambda t: (t[0], t[1]))]
+
+
+def select(title: str, options: Sequence[Tuple[str, object]], default: int = 1, hint: str = "") -> object:
+    """Arrow-key menu: ↑/↓ moves, Enter picks, typing filters, Esc clears the filter.
+    Without a terminal it falls back to a numbered prompt."""
+    if not menus_supported():
+        if title:
+            print(color(title, "1"))
+        for i, (label, _) in enumerate(options, start=1):
+            print(f"  {i}) {label}")
+        while True:
+            raw = ask("  choose", str(default))
+            if raw.isdigit() and 1 <= int(raw) <= len(options):
+                print()
+                return options[int(raw) - 1][1]
+            print("  enter a number from the list")
+
+    query, cur, top, drawn = "", max(0, default - 1), 0, 0
+    width = max(30, shutil.get_terminal_size((80, 24)).columns - 4)
+    view = max(5, min(12, shutil.get_terminal_size((80, 24)).lines - 6))
+    arrow = "❯" if unicode_ok() else ">"
+    help_line = hint or ("↑/↓ move · enter select · type to filter" if unicode_ok() else "up/down move, enter select, type to filter")
+    sys.stdout.write("\033[?25l")  # hide the cursor while the menu is up
+    try:
+        with _RawKeys() as keys:
+            while True:
+                shown = _filtered(options, query)
+                cur = min(cur, max(0, len(shown) - 1))
+                top = min(max(top, cur - view + 1), cur) if shown else 0
+                lines = []
+                if title:
+                    # lines must not wrap, or the redraw miscounts them
+                    room = width - (len(query) + 10 if query else 0)
+                    lines.append(color(_fit(title, room), "1") + (color(f"  filter: {query}", "33") if query else ""))
+                elif query:
+                    lines.append(color(f"filter: {query}", "33"))
+                if top > 0:
+                    lines.append(color("   ↑ more", "2"))
+                for i in range(top, min(len(shown), top + view)):
+                    label = _fit(shown[i][0], width - 4)
+                    lines.append(color(f" {arrow} ", "36") + color(label, "1;36") if i == cur else f"   {label}")
+                if not shown:
+                    lines.append(color("   (nothing matches)", "2"))
+                if top + view < len(shown):
+                    lines.append(color("   ↓ more", "2"))
+                lines.append(color(f"   {help_line}", "2"))
+                if drawn:
+                    sys.stdout.write(f"\033[{drawn}F\033[J")
+                sys.stdout.write("".join(f"\033[2K{line}\n" for line in lines))
+                sys.stdout.flush()
+                drawn = len(lines)
+
+                key = keys.read()
+                if key == "up":
+                    cur = (cur - 1) % len(shown) if shown else 0
+                elif key == "down":
+                    cur = (cur + 1) % len(shown) if shown else 0
+                elif key == "pgup":
+                    cur = max(0, cur - view)
+                elif key == "pgdn":
+                    cur = min(len(shown) - 1, cur + view) if shown else 0
+                elif key == "enter" and shown:
+                    label, value = shown[cur]
+                    # collapse the menu to one line showing the choice
+                    sys.stdout.write(f"\033[{drawn}F\033[J")
+                    summary = (color(title, "1") + " " if title else "") + color(_fit(_visible(label), width - len(title) - 2), "36")
+                    sys.stdout.write(summary + "\n\n")
+                    return value
+                elif key == "esc":
+                    query = ""
+                elif key == "backspace":
+                    query = query[:-1]
+                elif len(key) == 1 and key.isprintable():
+                    query += key
+                    cur = 0
+    finally:
+        sys.stdout.write("\033[?25h")
+        sys.stdout.flush()
+
+
+ask_choice = select  # the wizard's older name for it
 
 
 def screenshot_dir() -> Path:
@@ -1935,6 +2168,180 @@ def create_profile_wizard(cfg_file: Path) -> Profile:
     return profile
 
 
+# ---------------------------------------------------------------------------
+# Model setup (sortling --setup, or from the wizard's model menu)
+# ---------------------------------------------------------------------------
+
+CHAT_SERVERS: Sequence[Tuple[str, str, str]] = (
+    ("llama-swap / llama.cpp", "http://localhost:8080/v1", "LLAMA_SWAP_API_KEY"),
+    ("Ollama", "http://localhost:11434/v1", ""),
+    ("LM Studio", "http://localhost:1234/v1", ""),
+    ("vLLM", "http://localhost:8000/v1", ""),
+)
+HOSTED_CHAT: Sequence[Tuple[str, str, str]] = (
+    ("OpenAI", "https://api.openai.com/v1", "OPENAI_API_KEY"),
+    ("OpenRouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
+)
+VISION_HINTS = ("vl", "vision", "llava", "gemma-3", "gemma3", "gemma-4", "gemma4", "pixtral", "qwen3.5", "qwen3-5", "gpt-4o", "gpt-5", "claude")
+
+
+def fetch_models(base: str, key_env: str, timeout_s: int = 10) -> List[str]:
+    """Model ids from an OpenAI-style /v1/models listing; empty on any failure."""
+    base = base.rstrip("/")
+    url = base + ("/models" if base.endswith("/v1") else "/v1/models")
+    headers = {"Accept": "application/json"}
+    key = os.environ.get(key_env, "") if key_env else ""
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout_s) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        items = data.get("data", data.get("models", [])) if isinstance(data, dict) else data
+        return sorted({str(m.get("id") or m.get("name")) for m in items if isinstance(m, dict) and (m.get("id") or m.get("name"))})
+    except Exception:
+        return []
+
+
+def test_backend(name: str, cfg: dict, timeout_s: int = 300) -> str:
+    """Empty string when it answers, otherwise why not. Hybrids test both halves."""
+    try:
+        first, second = make_backends(name, cfg)
+    except ValueError as exc:
+        return str(exc)
+    for b in (first, second):
+        if b is None:
+            continue
+        if b.key_env and not b.api_key:
+            return f"${b.key_env} is not set"
+        print(color(f"  testing {b.name}... (a cold model can take a while to load)", "2"))
+        why = _check(b, timeout_s)
+        if why:
+            return f"{b.name}: {why}"
+    return ""
+
+
+def _pick_model(base: str, key_env: str, title: str) -> str:
+    ids = fetch_models(base, key_env)
+    if not ids:
+        print(color(f"  couldn't list models at {base} (is it running? is the key set?)", "2"))
+        return ask("  model id")
+    picked = select(title, [(i, i) for i in ids] + [("type a model id instead...", None)])
+    return str(picked) if picked else ask("  model id")
+
+
+def add_backend_wizard(cfg: dict, cfg_file: Path) -> Optional[str]:
+    kind = select("What kind of model?", [
+        (f"{icon('fast')} local decision model    llama.cpp or llama-swap /v1/systemone", "systemone"),
+        (f"{icon('fast')} TypeSafe Jev           hosted, text only", "jev"),
+        (f"{icon('thorough')} local chat model       llama-swap, Ollama, LM Studio, vLLM", "chat-local"),
+        (f"{icon('thorough')} hosted chat model      OpenAI, OpenRouter or another OpenAI-compatible API", "chat-hosted"),
+        (f"{icon('hybrid')} hybrid                 a fast model first, a chat model for the unsure files", "hybrid"),
+        ("back", None),
+    ])
+    if kind is None:
+        return None
+    bcfg: dict
+    if kind == "systemone":
+        base = ask("  server address", "http://localhost:8080").rstrip("/")
+        key_env = ask("  environment variable with its API key (blank if none)", "LLAMA_SWAP_API_KEY")
+        model = _pick_model(base, key_env, "Which decision model?")
+        root = base[:-3] if base.endswith("/v1") else base
+        candidates = [f"{root}/upstream/{model}/v1/systemone", f"{root}/v1/systemone"] if model else [f"{root}/v1/systemone"]
+        url = candidates[0]
+        for cand in candidates:
+            probe = SystemOneBackend("probe", {"url": cand, "api_key_env": key_env})
+            print(color(f"  trying {cand} ...", "2"))
+            if not _check(probe, 300):
+                url = cand
+                break
+        bcfg = {"type": "systemone", "url": url, "api_key_env": key_env,
+                "vision": ask_yes("  can it read images (served with --mmproj)?", True),
+                "label": f"{model or 'decision model'} on {urllib.parse.urlparse(root).netloc}"}
+        default_name = slugify(model or "decision")
+    elif kind == "jev":
+        bcfg = {"type": "systemone", "url": "https://api.typesafe.ai/v1/systemone", "model": "jev-latest",
+                "api_key_env": ask("  environment variable with your TypeSafe key", "TYPESAFE_API_KEY"),
+                "vision": False, "label": "TypeSafe Jev (hosted, text only)"}
+        default_name = "jev"
+    elif kind in ("chat-local", "chat-hosted"):
+        servers = CHAT_SERVERS if kind == "chat-local" else HOSTED_CHAT
+        server = select("Which server?", [(f"{n:<24} {u}", (n, u, k)) for n, u, k in servers] + [("another address...", None)])
+        if server is None:
+            name_, base, key_default = "server", ask("  base URL (ending in /v1)"), ""
+        else:
+            name_, base, key_default = server  # type: ignore[misc]
+        key_env = ask("  environment variable with its API key (blank if none)", key_default)
+        model = _pick_model(base, key_env, "Which model?")
+        looks_visual = any(h in model.lower() for h in VISION_HINTS)
+        bcfg = {"type": "openai", "url": base.rstrip("/"), "model": model, "api_key_env": key_env,
+                "vision": ask_yes("  can it read images?", looks_visual), "label": f"{model} via {name_}"}
+        default_name = slugify(model.split("/")[-1])
+    else:
+        fast = [n for n, c in cfg["backends"].items() if c.get("type", "systemone") == "systemone"]
+        chat = [n for n, c in cfg["backends"].items() if c.get("type") == "openai"]
+        if not fast or not chat:
+            print("  a hybrid needs one decision model and one chat model; add those first.\n")
+            return None
+        first = str(select("First pass (fast)", [(describe_entry(n, cfg), n) for n in fast]))
+        second = str(select("Second look at unsure files (thorough)", [(describe_entry(n, cfg), n) for n in chat]))
+        bcfg = {"type": "hybrid", "first": first, "second": second, "label": f"{first} first, {second} re-checks unsure files"}
+        default_name = f"hybrid-{first}"
+
+    name = slugify(ask("  name for it", default_name))
+    trial = json.loads(json.dumps(cfg))
+    trial["backends"][name] = bcfg
+    why = test_backend(name, trial)
+    print(f"  {icon('ok')} {name} answered" if not why else f"  {icon('warn')} {name} didn't answer: {why}")
+    if not ask_yes(f"  save '{name}'", not why):
+        return None
+    user = read_user_config(cfg_file)
+    user.setdefault("backends", {})[name] = bcfg
+    user["hidden_backends"] = [h for h in user.get("hidden_backends", []) if h != name]
+    if ask_yes(f"  make '{name}' the default", not why):
+        user["default_backend"] = name
+    save_config(cfg_file, user)
+    print(f"  {icon('ok')} saved to {cfg_file}\n")
+    return name
+
+
+def setup_wizard(cfg_file: Path) -> dict:
+    """Add, test, hide and pick the default model. Returns the reloaded config."""
+    while True:
+        cfg = load_config(cfg_file)
+        user = read_user_config(cfg_file)
+        default = cfg.get("default_backend")
+        star = "★" if unicode_ok() else "*"
+        rows = [((f"{star} " if n == default else "  ") + describe_entry(n, cfg), ("edit", n)) for n in cfg["backends"]]
+        rows += [("+ add a model...", ("add", "")), ("done", ("done", ""))]
+        action, name = select(f"Models  ({star} = default, saved in {cfg_file})", rows, default=len(rows))  # type: ignore[misc]
+        if action == "done":
+            return cfg
+        if action == "add":
+            add_backend_wizard(cfg, cfg_file)
+            continue
+        builtin = name in DEFAULT_CONFIG["backends"] and name not in user.get("backends", {})
+        what = select(f"{name}", [
+            ("test it", "test"),
+            ("make it the default", "default"),
+            ("hide it (built-in)" if builtin else "remove it", "remove"),
+            ("back", "back"),
+        ])
+        if what == "test":
+            why = test_backend(name, cfg)
+            print(f"  {icon('ok')} {name} answered\n" if not why else f"  {icon('warn')} {why}\n")
+        elif what == "default":
+            user["default_backend"] = name
+            save_config(cfg_file, user)
+        elif what == "remove":
+            if builtin:
+                user["hidden_backends"] = sorted(set(user.get("hidden_backends", [])) | {name})
+            else:
+                user.get("backends", {}).pop(name, None)
+            if user.get("default_backend") == name:
+                user.pop("default_backend", None)
+            save_config(cfg_file, user)
+
+
 def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
     if not args.no_banner:
         print_banner()
@@ -1952,7 +2359,7 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
     targets.append(("Another folder...", None))
     picked = ask_choice("What do you want to tidy?", targets)
     if picked is None:
-        root = Path(ask("  folder path")).expanduser()
+        root = Path(ask("  folder path", paths=True)).expanduser()
         kinds: Tuple[str, ...] = ("pdf", "image")
         print()
     else:
@@ -1991,8 +2398,15 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
     print(f"  {icon('thorough')} thorough  a general chat LLM: explains each file, slower, confidence is self-reported,")
     print("               so the review/delete thresholds are less trustworthy.")
     print(f"  {icon('hybrid')} hybrid    fast on everything, thorough only on the files fast is unsure about.")
-    default_idx = next((i for i, n in enumerate(names, start=1) if n == cfg.get("default_backend")), 1)
-    picked_name = str(ask_choice("", [(describe_entry(n, cfg), n) for n in names], default_idx))
+    while True:
+        default_idx = next((i for i, n in enumerate(names, start=1) if n == cfg.get("default_backend")), 1)
+        gear = "⚙" if unicode_ok() else "*"
+        picked = ask_choice("", [(describe_entry(n, cfg), n) for n in names] + [(f"{gear} set up models...", None)], default_idx)
+        if picked is not None:
+            picked_name = str(picked)
+            break
+        cfg = setup_wizard(cfg_file)
+        names = list(cfg["backends"])
     try:
         backend, second = make_backends(picked_name, cfg)
     except ValueError as exc:
@@ -2087,6 +2501,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--url", default="", help="Override the backend URL")
     p.add_argument("--config", default="", help="Config file (default: $XDG_CONFIG_HOME/sortling/config.json)")
     p.add_argument("--init-config", action="store_true", help="Write a starter config with all backends and exit")
+    p.add_argument("--setup", action="store_true", help="Add, test and choose models interactively, then exit")
     p.add_argument("--list-backends", action="store_true", help="Show configured backends and exit")
     p.add_argument("--disable-llm", action="store_true", help="Skip all models and use filename keywords")
     p.add_argument("--min-confidence", type=float, default=0.6, help="Below this, documents go to _review")
@@ -2146,6 +2561,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except (OSError, ValueError) as exc:
         print(f"error: cannot read config {cfg_file}: {exc}", file=sys.stderr)
         return 2
+
+    if args.setup:
+        try:
+            if not args.no_banner:
+                print_banner()
+            setup_wizard(cfg_file)
+            return 0
+        except KeyboardInterrupt:
+            print("\ncancelled.")
+            return 130
 
     if args.list_backends:
         for n in cfg["backends"]:

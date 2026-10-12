@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Pack assets/faces/head-*.png into sortling.py's embedded face sprites.
+"""Pack assets/faces/head-*.png (the progress face) and assets/poses/sortling_idle.png (the
+banner hero) into sortling.py's embedded sprites.
 
     python3 tools/encode_faces.py            # rewrite the FACES block in sortling.py
     python3 tools/encode_faces.py --width 34 --check
@@ -50,6 +51,7 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--width", type=int, default=34)
     p.add_argument("--colors", type=int, default=64)
+    p.add_argument("--hero-width", type=int, default=38)
     p.add_argument("--check", action="store_true", help="print sizes, don't write")
     args = p.parse_args()
 
@@ -81,18 +83,46 @@ def main() -> int:
     packed = base64.b64encode(zlib.compress(blob.encode(), 9)).decode()
     lines = [packed[i:i + 96] for i in range(0, len(packed), 96)]
     print(f"{len(NAMES)} faces, {dims[0]}x{dims[1]} px, {len(palette)} colors, {len(packed)} bytes embedded")
+
+    hero = pack_hero(ROOT / "assets" / "poses" / "sortling_idle.png", args.hero_width)
+    print(f"hero: {args.hero_width} px wide, {len(hero)} bytes embedded")
     if args.check:
         return 0
 
     target = ROOT / "sortling.py"
     src = target.read_text(encoding="utf-8")
-    block = "FACES_DATA = (\n" + "".join(f'    "{line}"\n' for line in lines) + ")\n"
-    new, n = re.subn(r"(# --- FACES BEGIN.*?\n).*?(# --- FACES END)", lambda m: m.group(1) + block + m.group(2), src, flags=re.S)
-    if n != 1:
-        sys.exit("error: FACES BEGIN/END markers not found in sortling.py")
-    target.write_text(new, encoding="utf-8")
+    for marker, var, packed_text in (("FACES", "FACES_DATA", packed), ("HERO", "HERO_DATA", hero)):
+        chunks = [packed_text[i:i + 96] for i in range(0, len(packed_text), 96)]
+        block = f"{var} = (\n" + "".join(f'    "{c}"\n' for c in chunks) + ")\n"
+        src, n = re.subn(rf"(# --- {marker} BEGIN.*?\n).*?(# --- {marker} END)", lambda m: m.group(1) + block + m.group(2), src, flags=re.S)
+        if n != 1:
+            sys.exit(f"error: {marker} BEGIN/END markers not found in sortling.py")
+    target.write_text(src, encoding="utf-8")
     print(f"updated {target}")
     return 0
+
+
+def pack_hero(path: Path, width: int) -> str:
+    """The banner pose. It isn't drawn on a pixel grid, so area-average it, then cut the palette."""
+    shrunk = [IM, str(path), "-filter", "box", "-resize", f"{width}x"]
+    w, h = map(int, subprocess.run([*shrunk, "-format", "%w %h", "info:"], capture_output=True, text=True, check=True).stdout.split())
+    rgb = subprocess.run([*shrunk, "-alpha", "off", "+dither", "-colors", "40", "-depth", "8", "rgb:-"],
+                         capture_output=True, check=True).stdout
+    mask = subprocess.run([*shrunk, "-alpha", "extract", "-threshold", "45%", "-depth", "8", "gray:-"],
+                          capture_output=True, check=True).stdout
+    palette, index, out = [], {}, bytearray()
+    for i in range(w * h):
+        if mask[i] < 128:
+            out.append(0)
+            continue
+        key = rgb[i * 3:i * 3 + 3].hex()
+        if key not in index:
+            palette.append(key)
+            index[key] = len(palette)
+        out.append(index[key])
+    blob = json.dumps({"w": w, "h": h, "palette": palette, "frames": {"hero": base64.b64encode(bytes(out)).decode()}},
+                      separators=(",", ":"))
+    return base64.b64encode(zlib.compress(blob.encode(), 9)).decode()
 
 
 if __name__ == "__main__":
