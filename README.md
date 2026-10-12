@@ -116,6 +116,42 @@ and `_duplicates`. Define one in any of three ways:
 
 Order of precedence: `--profile-file`, `--profile`, `.sortling.json`, then `default`.
 
+### Tuning a built-in
+
+The built-in profiles are plain JSON data inside `sortling.py`: the questions the model
+is asked, the options and their descriptions, and the thresholds.
+`python3 sortling.py --show-profile default` prints all of it. With no name,
+`--show-profile` prints the profile a run would use, after your changes.
+
+To change a built-in, set only the keys you want to change. Everything else stays
+built-in and keeps improving with updates. Nested objects merge, `null` removes an
+option, and keys starting with `_` are notes:
+
+```json
+{
+  "profiles": {
+    "default": {
+      "thresholds": {"min_confidence": 0.55},
+      "questions": {
+        "category": {"criteria": {"learning": "courses, papers, cheat sheets, charts and figures"}},
+        "topic": {"criteria": {"shopping": null, "recipes": "recipes and cooking"}}
+      }
+    },
+    "strict": {"profile": "default", "thresholds": {"delete_min_prob": 0.95}}
+  }
+}
+```
+
+- A config entry named after a built-in (`default`, `photos`) tunes that built-in.
+- `{"profile": "<name>", ...}` makes a tuned copy under a new name. It also works in
+  `--profile-file` and in `.sortling.json`.
+- New screenshot topics, photo categories and doc categories become folders
+  (`screenshots/recipes/`). The four image kinds are fixed (you can reword them), and the
+  catch-alls the sorting depends on (`other`, `unknown`) can't be removed. sortling
+  reports which key is wrong.
+- Command-line threshold flags beat the profile's thresholds. Custom folder profiles can
+  set `thresholds` too.
+
 ## For agents and scripts
 
 `--json` prints the plan (every file, its folder, the probabilities and a per-folder
@@ -185,7 +221,9 @@ Useful flags:
 - `--types pdf,image`, `--recursive-source`
 - `--profile NAME`, `--profile-file JSON|-`, `--backend NAME`, `--second-pass NAME`, `--url URL`
 - `--json`: the plan as JSON on stdout
-- `--min-confidence` (0.6), `--screenshot-min-confidence` (0.4), `--delete-min-prob` (0.85)
+- `--min-confidence` (0.6), `--screenshot-min-confidence` (0.4), `--delete-min-prob` (0.85):
+  override the profile's thresholds for one run
+- `--show-profile [NAME]`: print a profile's questions, options and thresholds as JSON
 - `--delete-exact-duplicates`, `--hard-delete-delete-candidates`: real deletes, off by default
 - `--disable-llm`: filename keywords only
 - `--setup`: add, test and choose models, then exit

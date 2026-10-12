@@ -33,7 +33,8 @@ python3 sortling.py --undo <manifest.json>                               # put e
 - **Pick a backend:** `--backend <name>` (see `--list-backends`). Add `--second-pass <name>`
   for a hybrid run.
 - **Thresholds** (rarely needed): `--min-confidence 0.6`, `--screenshot-min-confidence 0.4`,
-  `--delete-min-prob 0.85`.
+  `--delete-min-prob 0.85`. These override the profile's own thresholds.
+- **See what the model is asked:** `--show-profile [name]` prints the profile as JSON.
 
 Exit code 0 is success, 2 is a usage or config error. If no model is reachable, sortling
 still runs on filename keywords; `classifier` in the output says so. Tell the user
@@ -65,7 +66,8 @@ EOF
   `_delete/` only when the model is at least 85% sure it's junk.
 - To make a folder always sort the same way, save the JSON as `<folder>/.sortling.json`.
   It's used automatically when no `--profile` or `--profile-file` is given.
-  `{"profile": "photos"}` there selects a built-in profile.
+  `{"profile": "photos"}` there selects a built-in profile. Extra keys tune it, e.g.
+  `{"profile": "default", "thresholds": {"min_confidence": 0.5}}` (see the README).
 
 ## Built-in profiles
 

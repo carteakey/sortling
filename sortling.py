@@ -37,7 +37,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
@@ -66,92 +66,133 @@ LEGACY_TARGET_FOLDERS: Tuple[str, ...] = (
     "99_Duplicates",
 )
 
-# built-in "default" profile: docs/<category>, screenshots/<topic>, photos/
-DOC_FOLDERS: Dict[str, str] = {
-    "personal": "docs/personal",
-    "medical": "docs/medical",
-    "legal": "docs/legal",
-    "finance": "docs/finance",
-    "work": "docs/work",
-    "travel": "docs/travel",
-    "learning": "docs/learning",
-}
+DOCS_FOLDER = "docs"
 LEARNING_ARCHIVE_FOLDER = "docs/learning/archive"
 PHOTOS_FOLDER = "photos"
 MEMES_FOLDER = "memes"
-DEFAULT_PROFILE_ROOTS: Tuple[str, ...] = ("docs", "screenshots", PHOTOS_FOLDER, MEMES_FOLDER)
-
-# camera photos: photos/<category>. Kept coarse on purpose; photo apps do faces and places better
-PHOTO_CATEGORIES: Dict[str, str] = {
-    "people": "people, selfies, family, friends, group photos",
-    "places": "landscapes, cities, buildings, travel scenery",
-    "food": "meals, drinks, cooking, restaurants",
-    "pets": "pets and other animals",
-    "events": "celebrations, weddings, parties, concerts, festivals, ceremonies",
-    "other": "objects, everyday scenes or anything else",
-}
-
-CATEGORY_DESCRIPTIONS: Dict[str, str] = {
-    "personal": "identity documents, personal records, resumes, certificates, personal letters or chats",
-    "medical": "health records, lab reports, prescriptions, insurance claims for care",
-    "finance": "bank or card statements, invoices, receipts, bills, taxes, payments, payslips",
-    "work": "employer documents, job-related technical material, work chats, dashboards or tickets",
-    "learning": "courses, lecture notes, tutorials, papers, cheat sheets, code or reference material",
-    "travel": "bookings, boarding passes, tickets, itineraries, maps, visas in use for a trip",
-    "legal": "contracts, leases, property papers, legal notices, agreements",
-    "spam": "marketing, promotions, ads, junk, memes or throwaway content with no lasting value",
-    "unknown": "cannot tell what this is",
-}
-
-# screenshots that aren't records: topic -> description; folder is screenshots/<topic>
-SCREENSHOT_TOPICS: Dict[str, str] = {
-    "code": "code, terminal, error messages, logs, developer tools",
-    "chats": "messaging or chat conversations, emails, comments",
-    "reading": "articles, documentation, posts or text worth reading later",
-    "apps": "app or website UI, settings, dashboards, design inspiration",
-    "social": "social media posts and feeds, videos from feeds",
-    "shopping": "products, prices, wishlists, carts (not completed purchases)",
-    "maps": "maps, directions, places, addresses",
-    "media": "music, movies, TV, games, video stills",
-    "other": "none of the above",
-}
-
-IMAGE_KINDS: Dict[str, str] = {
-    "screenshot": "a capture of a screen: app, website, chat, code, map, social feed, game",
-    "photo": "a real camera photo of people, places, food, pets, objects or scenery",
-    "meme": (
-        "a meme, joke image, forwarded graphic, good morning or festival wishes card, "
-        "motivational or religious quote image, or other made-to-share picture"
-    ),
-    "document": (
-        "a scan or photo of a paper document, or a screenshot of a record such as a receipt, "
-        "order confirmation, booking, ticket, bill, ID or statement"
-    ),
-}
-
-# concrete yes/no questions answer more reliably than an abstract keep/archive/delete choice
-JUNK_QUESTION = (
-    "Is this junk with no lasting value, such as an ad, spam, or a blurry, "
-    "accidental, blank or black photo or screenshot?"
-)
-CORE_REFERENCE_QUESTION = "Is this core reference material worth coming back to often, rather than old notes to archive?"
+DEFAULT_PROFILE_ROOTS: Tuple[str, ...] = (DOCS_FOLDER, "screenshots", PHOTOS_FOLDER, MEMES_FOLDER)
 NONE_OPTION = "none"
 
-CATEGORY_ALIASES: Dict[str, str] = {
-    "personal_records": "personal",
-    "identity": "personal",
-    "health": "medical",
-    "financial": "finance",
-    "banking": "finance",
-    "career": "work",
-    "employment": "work",
-    "education": "learning",
-    "study": "learning",
-    "property": "legal",
-    "junk": "spam",
-    "marketing": "spam",
-    "unclear": "unknown",
-    "misc": "unknown",
+# Built-in profiles as plain JSON data: the questions the model is asked, their options and the
+# thresholds. A config "profiles" entry with a built-in's name, or {"profile": "<built-in>", ...}
+# in a saved profile or .sortling.json, deep-merges over these (null removes an option).
+# Routing stays in code: the option names it relies on can be reworded but not removed.
+BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
+    "default": {
+        "description": "docs/<category>, screenshots/<topic>, photos/<category>, memes/",
+        "thresholds": {
+            # below this, the image kind or document category is unsure: _review
+            "min_confidence": 0.6,
+            # below this topic probability, screenshots go to screenshots/other
+            "screenshot_min_confidence": 0.4,
+            # junk probability needed for _delete
+            "delete_min_prob": 0.85,
+        },
+        "questions": {
+            # images first split into documents, screenshots, photos and memes, each with its own tree
+            "kind": {
+                "instructions": "What kind of image is this?",
+                "criteria": {
+                    "screenshot": "a capture of a screen: app, website, chat, code, map, social feed, game",
+                    "photo": "a real camera photo of people, places, food, pets, objects or scenery",
+                    "meme": (
+                        "a meme, joke image, forwarded graphic, good morning or festival wishes card, "
+                        "motivational or religious quote image, or other made-to-share picture"
+                    ),
+                    "document": (
+                        "a scan or photo of a paper document, or a screenshot of a record such as a receipt, "
+                        "order confirmation, booking, ticket, bill, ID or statement"
+                    ),
+                },
+            },
+            # concrete yes/no questions answer more reliably than an abstract keep/archive/delete choice
+            "junk": {
+                "instructions": (
+                    "Is this junk with no lasting value, such as an ad, spam, or a blurry, "
+                    "accidental, blank or black photo or screenshot?"
+                ),
+            },
+            # documents: docs/<category>
+            "category": {
+                "instructions": "If this is a document or record, which category of personal file is it?",
+                "criteria": {
+                    "personal": "identity documents, personal records, resumes, certificates, personal letters or chats",
+                    "medical": "health records, lab reports, prescriptions, insurance claims for care",
+                    "finance": "bank or card statements, invoices, receipts, bills, taxes, payments, payslips",
+                    "work": "employer documents, job-related technical material, work chats, dashboards or tickets",
+                    "learning": "courses, lecture notes, tutorials, papers, cheat sheets, code or reference material",
+                    "travel": "bookings, boarding passes, tickets, itineraries, maps, visas in use for a trip",
+                    "legal": "contracts, leases, property papers, legal notices, agreements",
+                    "spam": "marketing, promotions, ads, junk, memes or throwaway content with no lasting value",
+                    "unknown": "cannot tell what this is",
+                },
+            },
+            "core": {
+                "instructions": "Is this core reference material worth coming back to often, rather than old notes to archive?",
+            },
+            # screenshots that aren't records: screenshots/<topic>
+            "topic": {
+                "instructions": "If this is a screenshot, what is it mainly about?",
+                "criteria": {
+                    "code": "code, terminal, error messages, logs, developer tools",
+                    "chats": "messaging or chat conversations, emails, comments",
+                    "reading": "articles, documentation, posts or text worth reading later",
+                    "apps": "app or website UI, settings, dashboards, design inspiration",
+                    "social": "social media posts and feeds, videos from feeds",
+                    "shopping": "products, prices, wishlists, carts (not completed purchases)",
+                    "maps": "maps, directions, places, addresses",
+                    "media": "music, movies, TV, games, video stills",
+                    "other": "none of the above",
+                },
+            },
+            # camera photos: photos/<category>. Kept coarse on purpose; photo apps do faces and places better
+            "photo": {
+                "instructions": "If this is a camera photo, what is it mainly of?",
+                "criteria": {
+                    "people": "people, selfies, family, friends, group photos",
+                    "places": "landscapes, cities, buildings, travel scenery",
+                    "food": "meals, drinks, cooking, restaurants",
+                    "pets": "pets and other animals",
+                    "events": "celebrations, weddings, parties, concerts, festivals, ceremonies",
+                    "other": "objects, everyday scenes or anything else",
+                },
+            },
+        },
+        # model answers outside the category options that mean one of them
+        "category_aliases": {
+            "personal_records": "personal",
+            "identity": "personal",
+            "health": "medical",
+            "financial": "finance",
+            "banking": "finance",
+            "career": "work",
+            "employment": "work",
+            "education": "learning",
+            "study": "learning",
+            "property": "legal",
+            "junk": "spam",
+            "marketing": "spam",
+            "unclear": "unknown",
+            "misc": "unknown",
+        },
+    },
+    # the lean profile for camera rolls: 3 questions per image, documents are not sub-sorted
+    "photos": {
+        "extends": "default",
+        "description": "camera rolls and WhatsApp dumps: photos/<category>, memes/, screenshots/, docs/",
+    },
+}
+# the questions each built-in layout asks; the rest of an inherited spec is unused
+LAYOUT_QUESTIONS: Dict[str, Tuple[str, ...]] = {
+    "default": ("kind", "junk", "category", "core", "topic", "photo"),
+    "photos": ("kind", "junk", "photo"),
+}
+# options the routing code depends on
+REQUIRED_OPTIONS: Dict[str, Tuple[str, ...]] = {
+    "kind": ("screenshot", "photo", "meme", "document"),
+    "category": ("unknown",),
+    "topic": ("other",),
+    "photo": ("other",),
 }
 
 PDF_EXTS: Tuple[str, ...] = (".pdf",)
@@ -907,9 +948,13 @@ def describe_entry(name: str, cfg: dict) -> str:
 
 @dataclass
 class Thresholds:
-    min_confidence: float = 0.6
-    screenshot_min_confidence: float = 0.4
-    delete_min_prob: float = 0.85
+    min_confidence: float
+    screenshot_min_confidence: float
+    delete_min_prob: float
+
+
+THRESHOLD_KEYS: Tuple[str, ...] = tuple(f.name for f in fields(Thresholds))
+SPEC_KEYS: Tuple[str, ...] = ("description", "thresholds", "questions", "category_aliases")
 
 
 @dataclass
@@ -920,6 +965,8 @@ class Profile:
     layout: str = "custom"
     folders: Dict[str, str] = field(default_factory=dict)
     source: str = ""  # where it came from: built-in, config, file path
+    # the merged BUILTIN_PROFILE_SPECS entry for built-in layouts; custom ones may set thresholds
+    spec: dict = field(default_factory=dict)
 
     @property
     def builtin(self) -> bool:
@@ -930,26 +977,28 @@ class Profile:
         if self.layout == "default":
             return DEFAULT_PROFILE_ROOTS
         if self.layout == "photos":
-            return (PHOTOS_FOLDER, MEMES_FOLDER, "screenshots", "docs")
+            return (PHOTOS_FOLDER, MEMES_FOLDER, "screenshots", DOCS_FOLDER)
         return tuple(self.folders)
 
+    def question(self, qid: str) -> dict:
+        return self.spec["questions"][qid]
 
-BUILTIN_PROFILES: Dict[str, Profile] = {
-    "default": Profile(
-        name="default",
-        layout="default",
-        source="built-in",
-        description="docs/<category>, screenshots/<topic>, photos/<category>, memes/",
-    ),
-    "photos": Profile(
-        name="photos",
-        layout="photos",
-        source="built-in",
-        description="camera rolls and WhatsApp dumps: photos/<category>, memes/, screenshots/, docs/",
-    ),
-}
-DEFAULT_PROFILE = BUILTIN_PROFILES["default"]
+    def options(self, qid: str) -> Dict[str, str]:
+        return self.spec["questions"][qid]["criteria"]
+
+    def thresholds(self, overrides: Optional[dict] = None) -> Thresholds:
+        """The profile's thresholds over the built-in ones; overrides that aren't None (flags) win."""
+        th = {**builtin_spec("default")["thresholds"], **self.spec.get("thresholds", {})}
+        th.update({k: v for k, v in (overrides or {}).items() if v is not None})
+        return Thresholds(**th)
+
+
 LOCAL_PROFILE_FILE = ".sortling.json"
+PROFILE_TUNING_NOTE = (
+    "Tune a built-in profile by setting only the keys you change; the rest stays built-in and keeps "
+    "improving with updates. See them all with: sortling.py --show-profile default. "
+    'Example: {"thresholds": {"min_confidence": 0.55}, "questions": {"topic": {"criteria": {"shopping": null}}}}'
+)
 
 
 def slugify(name: str) -> str:
@@ -957,35 +1006,140 @@ def slugify(name: str) -> str:
     return slug or "other"
 
 
-def profile_from_dict(raw: dict, name: str, source: str, cfg: dict) -> Profile:
-    """A profile object: {"profile": "<built-in or saved name>"} or {"folders": {name: description}}."""
+def merge_spec(base: dict, over: dict) -> dict:
+    """Deep-merge JSON objects: nested objects merge, null removes a key, "_"-prefixed keys are notes."""
+    out = dict(base)
+    for k, v in over.items():
+        if k.startswith("_"):
+            continue
+        if v is None:
+            out.pop(k, None)
+        elif isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = merge_spec(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def builtin_spec(name: str) -> dict:
+    """A built-in profile's spec with "extends" resolved, as a fresh copy."""
+    raw = BUILTIN_PROFILE_SPECS[name]
+    base = builtin_spec(raw["extends"]) if "extends" in raw else {}
+    return json.loads(json.dumps(merge_spec(base, {k: v for k, v in raw.items() if k != "extends"})))
+
+
+def check_thresholds(th: object, source: str) -> None:
+    if not isinstance(th, dict):
+        raise ValueError(f"{source}: thresholds must be a JSON object")
+    for k, v in th.items():
+        if k not in THRESHOLD_KEYS:
+            raise ValueError(f"{source}: unknown threshold {k!r} (known: {', '.join(THRESHOLD_KEYS)})")
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0.0 <= v <= 1.0:
+            raise ValueError(f"{source}: thresholds.{k} must be a number from 0 to 1")
+
+
+def check_spec(spec: dict, layout: str, source: str) -> None:
+    """Reject overrides the routing code can't follow, with a message that says why."""
+    unknown = sorted(k for k in spec if k not in SPEC_KEYS)
+    if unknown:
+        raise ValueError(f"{source}: unknown profile keys: {', '.join(unknown)} (known: {', '.join(SPEC_KEYS)})")
+    check_thresholds(spec.get("thresholds", {}), source)
+    questions = spec.get("questions")
+    if not isinstance(questions, dict):
+        raise ValueError(f"{source}: questions must be a JSON object")
+    unknown = sorted(q for q in questions if q not in LAYOUT_QUESTIONS["default"])
+    if unknown:
+        raise ValueError(f"{source}: unknown questions: {', '.join(unknown)} (known: {', '.join(LAYOUT_QUESTIONS['default'])})")
+    for qid in LAYOUT_QUESTIONS[layout]:
+        q = questions.get(qid)
+        where = f"{source}: questions.{qid}"
+        if not isinstance(q, dict) or not isinstance(q.get("instructions"), str) or not q["instructions"].strip():
+            raise ValueError(f"{where}.instructions must be non-empty text")
+        if qid not in REQUIRED_OPTIONS:
+            continue
+        crit = q.get("criteria")
+        if not isinstance(crit, dict) or not all(isinstance(v, str) for v in crit.values()):
+            raise ValueError(f"{where}.criteria must map option names to descriptions")
+        missing = [o for o in REQUIRED_OPTIONS[qid] if o not in crit]
+        if missing:
+            raise ValueError(f"{where}.criteria needs {', '.join(missing)}: sorting depends on it")
+        if qid == "kind":
+            extra = sorted(set(crit) - set(REQUIRED_OPTIONS["kind"]))
+            if extra:
+                raise ValueError(f"{where}.criteria: image kinds are fixed ({', '.join(REQUIRED_OPTIONS['kind'])}); reword them instead of adding {', '.join(extra)}")
+        else:
+            # options become folder names
+            bad = [o for o in crit if slugify(o) != o or o == NONE_OPTION]
+            if bad:
+                raise ValueError(f"{where}.criteria: {', '.join(bad)} can't be a folder name (use lowercase letters, digits and -)")
+    aliases = spec.get("category_aliases", {})
+    if not isinstance(aliases, dict) or not all(isinstance(v, str) for v in aliases.values()):
+        raise ValueError(f"{source}: category_aliases must map model answers to category names")
+
+
+def custom_spec() -> dict:
+    """Custom profiles ask the built-in junk question alongside their folder question."""
+    return {"questions": {"junk": builtin_spec("default")["questions"]["junk"]}}
+
+
+def tuned_profile(layout: str, base: dict, over: dict, name: str, source: str) -> Profile:
+    """A built-in layout with its spec deep-merged with `over`."""
+    spec = merge_spec(base, over)
+    check_spec(spec, layout, source)
+    # the layout decides which questions are asked; drop what it doesn't use
+    spec["questions"] = {q: spec["questions"][q] for q in LAYOUT_QUESTIONS[layout]}
+    return Profile(name=name, description=str(spec.get("description", "")), layout=layout, source=source, spec=spec)
+
+
+def profile_from_dict(raw: dict, name: str, source: str, cfg: dict, seen: Tuple[str, ...] = ()) -> Profile:
+    """A profile object: {"folders": {name: description}}, or {"profile": "<built-in or saved name>"}
+    with optional overrides of a built-in's spec (questions, thresholds, ...)."""
     if not isinstance(raw, dict):
         raise ValueError(f"{source}: profile must be a JSON object")
     if "profile" in raw and "folders" not in raw:
-        return load_profile(str(raw["profile"]), cfg)
+        parent = load_profile(str(raw["profile"]), cfg, seen)
+        over = {k: v for k, v in raw.items() if k not in ("profile", "name")}
+        if not over:
+            return parent
+        if not parent.builtin:
+            raise ValueError(f"{source}: only built-in profiles can be tuned; {parent.name} is a list of folders")
+        return tuned_profile(parent.layout, parent.spec, over, str(raw.get("name") or name), source)
     folders = {slugify(k): str(v or "") for k, v in (raw.get("folders") or {}).items()}
     if len(folders) < 2:
         raise ValueError(f"{source}: a custom profile needs at least 2 folders")
     clash = sorted(set(folders) & {*SYSTEM_FOLDERS, NONE_OPTION})
     if clash:
         raise ValueError(f"{source}: reserved folder names: {', '.join(clash)}")
+    spec = custom_spec()
+    if "thresholds" in raw:
+        check_thresholds(raw["thresholds"], source)
+        spec["thresholds"] = dict(raw["thresholds"])
     return Profile(
         name=str(raw.get("name") or name),
         description=str(raw.get("description", "")),
         layout="custom",
         folders=folders,
         source=source,
+        spec=spec,
     )
 
 
-def load_profile(name: str, cfg: dict) -> Profile:
-    if name in ("", "default") or name in BUILTIN_PROFILES:
-        return BUILTIN_PROFILES[name or "default"]
+def load_profile(name: str, cfg: dict, seen: Tuple[str, ...] = ()) -> Profile:
+    name = name or "default"
+    if name in seen:
+        raise ValueError(f"profiles extend each other in a loop: {' -> '.join((*seen, name))}")
     raw = cfg.get("profiles", {}).get(name)
+    if name in BUILTIN_PROFILE_SPECS:
+        # a config entry with a built-in's name tunes that built-in
+        over = raw or {}
+        if not isinstance(over, dict) or "folders" in over or over.get("profile", name) != name:
+            raise ValueError(f'config profile "{name}" can tune the built-in but not replace it; save yours under another name')
+        over = {k: v for k, v in over.items() if k not in ("profile", "name") and not k.startswith("_")}
+        return tuned_profile(name, builtin_spec(name), over, name, "built-in + config" if over else "built-in")
     if not raw:
-        saved = ", ".join(cfg.get("profiles", {})) or "none"
-        raise ValueError(f'unknown profile "{name}" (built-in: {", ".join(BUILTIN_PROFILES)}; saved: {saved})')
-    return profile_from_dict(raw, name, "config", cfg)
+        saved = ", ".join(n for n in cfg.get("profiles", {}) if n not in BUILTIN_PROFILE_SPECS) or "none"
+        raise ValueError(f'unknown profile "{name}" (built-in: {", ".join(BUILTIN_PROFILE_SPECS)}; saved: {saved})')
+    return profile_from_dict(raw, name, "config", cfg, (*seen, name))
 
 
 def load_profile_file(path: str, cfg: dict) -> Profile:
@@ -1006,7 +1160,7 @@ def local_profile(root: Path, cfg: dict) -> Optional[Profile]:
 
 
 def build_questions(profile: Profile, kind: str, has_image: bool) -> dict:
-    junk = {"type": "noul", "instructions": JUNK_QUESTION}
+    junk = {"type": "noul", "instructions": profile.question("junk")["instructions"]}
     if profile.layout == "custom":
         criteria = dict(profile.folders)
         criteria[NONE_OPTION] = "none of these folders fit"
@@ -1014,36 +1168,27 @@ def build_questions(profile: Profile, kind: str, has_image: bool) -> dict:
             "folder": {"type": "choice", "instructions": "Which folder does this file belong in?", "criteria": criteria},
             "junk": junk,
         }
-    image_kind = {"type": "choice", "instructions": "What kind of image is this?", "criteria": IMAGE_KINDS}
-    photo = {
-        "type": "choice",
-        "instructions": "If this is a camera photo, what is it mainly of?",
-        "criteria": PHOTO_CATEGORIES,
-    }
+
+    def choice(qid: str) -> dict:
+        return {"type": "choice", "instructions": profile.question(qid)["instructions"], "criteria": dict(profile.options(qid))}
+
+    image_kind, photo = choice("kind"), choice("photo")
     if profile.layout == "photos":
         # the lean profile: 3 questions per image, documents are not sub-sorted
         if kind == "image" and has_image:
             return {"kind": image_kind, "junk": junk, "photo": photo}
         return {"junk": junk}
-    category = {
-        "type": "choice",
-        "instructions": "If this is a document or record, which category of personal file is it?",
-        "criteria": CATEGORY_DESCRIPTIONS,
-    }
+    category = choice("category")
     if kind == "image" and has_image:
         # images first split into documents, screenshots, photos and memes, each with its own tree
         return {
             "kind": image_kind,
             "junk": junk,
             "category": category,
-            "topic": {
-                "type": "choice",
-                "instructions": "If this is a screenshot, what is it mainly about?",
-                "criteria": SCREENSHOT_TOPICS,
-            },
+            "topic": choice("topic"),
             "photo": photo,
         }
-    return {"category": category, "junk": junk, "core": {"type": "noul", "instructions": CORE_REFERENCE_QUESTION}}
+    return {"category": category, "junk": junk, "core": {"type": "noul", "instructions": profile.question("core")["instructions"]}}
 
 
 def top_choice(answers: dict, qid: str) -> Tuple[str, float]:
@@ -1052,9 +1197,10 @@ def top_choice(answers: dict, qid: str) -> Tuple[str, float]:
     return choice, to_float_0_1(ans.get("probabilities", {}).get(choice, 0.0))
 
 
-def normalize_category(value: str) -> str:
-    v = CATEGORY_ALIASES.get((value or "").strip().lower(), (value or "").strip().lower())
-    return v if v in CATEGORY_DESCRIPTIONS else "unknown"
+def normalize_category(profile: Profile, value: str) -> str:
+    v = (value or "").strip().lower()
+    v = profile.spec.get("category_aliases", {}).get(v, v)
+    return v if v in profile.options("category") else "unknown"
 
 
 @dataclass
@@ -1095,7 +1241,7 @@ def route(profile: Profile, answers: dict, th: Thresholds) -> Routed:
         if image_kind == "photo":
             sub, sub_p = top_choice(answers, "photo")
             reason += f",photo:{sub}={sub_p:.2f}"
-            if sub not in PHOTO_CATEGORIES or sub_p < th.screenshot_min_confidence:
+            if sub not in profile.options("photo") or sub_p < th.screenshot_min_confidence:
                 return Routed("photo:other", "keep", f"{PHOTOS_FOLDER}/other", kind_p, reason + " | ->other", True)
             return Routed(f"photo:{sub}", "keep", f"{PHOTOS_FOLDER}/{sub}", min(kind_p, sub_p), reason, junkish)
         if image_kind == "screenshot":
@@ -1104,23 +1250,23 @@ def route(profile: Profile, answers: dict, th: Thresholds) -> Routed:
             topic, topic_p = top_choice(answers, "topic")
             reason += f",topic:{topic}={topic_p:.2f}"
             # misfiled screenshots cost little: unsure ones go to screenshots/other, not the review inbox
-            if topic not in SCREENSHOT_TOPICS or topic_p < th.screenshot_min_confidence:
+            if topic not in profile.options("topic") or topic_p < th.screenshot_min_confidence:
                 reason += f" | topic<{th.screenshot_min_confidence:.2f}->other"
                 return Routed("screenshot:other", "keep", "screenshots/other", kind_p, reason, True)
             return Routed(f"screenshot:{topic}", "keep", f"screenshots/{topic}", min(kind_p, topic_p), reason, junkish)
         # image_kind == "document": a scanned or screenshotted record, filed with the docs below
         if profile.layout == "photos":
-            return Routed("document", "keep", "docs", kind_p, reason, junkish)
+            return Routed("document", "keep", DOCS_FOLDER, kind_p, reason, junkish)
     elif profile.layout == "photos":
         # PDFs in the photos profile are not sub-sorted
         reason = f"decision:junk={junk_p:.2f}"
         if junk_p >= th.delete_min_prob:
             return Routed("document:junk", "delete_candidate", DELETE_FOLDER, junk_p, reason)
-        return Routed("document", "keep", "docs", 1.0 - junk_p, reason, junkish)
+        return Routed("document", "keep", DOCS_FOLDER, 1.0 - junk_p, reason, junkish)
 
     # documents: the folder comes from the category; yes/no answers pick delete or learning core vs archive
     cat_choice, cat_p = top_choice(answers, "category")
-    category = normalize_category(cat_choice)
+    category = normalize_category(profile, cat_choice)
     core_p = to_float_0_1(answers["core"].get("noul")) if "core" in answers else 1.0
     doc_reason = f"{category}={cat_p:.2f}" + (f",core={core_p:.2f}" if "core" in answers else "")
     reason = (reason + "," + doc_reason) if "kind" in answers else f"decision:{doc_reason},junk={junk_p:.2f}"
@@ -1132,7 +1278,7 @@ def route(profile: Profile, answers: dict, th: Thresholds) -> Routed:
         return Routed(category, "review", REVIEW_FOLDER, min(cat_p, 1.0 - junk_p), reason + f" | junk<{th.delete_min_prob:.2f}->review", True)
     if category == "learning" and core_p < 0.5:
         return Routed(category, "archive", LEARNING_ARCHIVE_FOLDER, cat_p, reason, junkish)
-    return Routed(category, "keep", DOC_FOLDERS[category], cat_p, reason, junkish)
+    return Routed(category, "keep", f"{DOCS_FOLDER}/{category}", cat_p, reason, junkish)
 
 
 def fallback_classify(profile: Profile, filename: str, text_excerpt: str) -> Routed:
@@ -1151,15 +1297,15 @@ def keyword_rules(profile: Profile, filename: str, text_excerpt: str) -> Tuple[s
     if has("congrats on winning", "contest", "promo", "unsubscribe", "marketing"):
         return ("spam", "delete_candidate", DELETE_FOLDER, 0.65, "keyword:spam")
     if has("study permit", "passport", "oci", "visa", "pr card"):
-        return ("personal", "keep", DOC_FOLDERS["personal"], 0.78, "keyword:identity")
+        return ("personal", "keep", f"{DOCS_FOLDER}/personal", 0.78, "keyword:identity")
     if has("invoice", "statement", "receipt", "tangerine", "cibc", "tax", "w8", "payment"):
-        return ("finance", "keep", DOC_FOLDERS["finance"], 0.73, "keyword:finance")
+        return ("finance", "keep", f"{DOCS_FOLDER}/finance", 0.73, "keyword:finance")
     if has("resume", "employment", "offer letter", "reference check", "certificate"):
-        return ("personal", "keep", DOC_FOLDERS["personal"], 0.74, "keyword:personal")
+        return ("personal", "keep", f"{DOCS_FOLDER}/personal", 0.74, "keyword:personal")
     if has("blood report", "prescription", "health", "medical", "lab"):
-        return ("medical", "keep", DOC_FOLDERS["medical"], 0.75, "keyword:medical")
+        return ("medical", "keep", f"{DOCS_FOLDER}/medical", 0.75, "keyword:medical")
     if has("oracle", "supply chain", "ebs", "oaf", "doc id", "plsql"):
-        return ("work", "archive", DOC_FOLDERS["work"], 0.72, "keyword:work")
+        return ("work", "archive", f"{DOCS_FOLDER}/work", 0.72, "keyword:work")
     if has("lecture", "cheat sheet", "numpy", "pandas", "machine learning", "deep learning"):
         return ("learning", "archive", LEARNING_ARCHIVE_FOLDER, 0.71, "keyword:learning")
     if has("screenshot", "screen shot", "screen_shot"):
@@ -2154,7 +2300,7 @@ def create_profile_wizard(cfg_file: Path) -> Profile:
             continue
         desc = ask(f"    what goes in '{slugify(folder)}'")
         folders[slugify(folder)] = desc
-    profile = Profile(name=name, description="custom", folders=folders)
+    profile = Profile(name=name, description="custom", folders=folders, spec=custom_spec())
     print(f"\n  uncertain files go to {REVIEW_FOLDER}/, junk to {DELETE_FOLDER}/")
     if ask_yes(f"  save '{name}' to {cfg_file}", True):
         user = read_user_config(cfg_file)
@@ -2379,12 +2525,21 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
         here = None
     if here is not None:
         profiles.append((LOCAL_PROFILE_FILE, here, "this folder's own profile: " + ", ".join(here.roots())))
-    for bname, builtin in BUILTIN_PROFILES.items():
-        profiles.append((bname, builtin, builtin.description))
+    for bname in BUILTIN_PROFILE_SPECS:
+        try:
+            builtin = load_profile(bname, cfg)
+        except ValueError as exc:
+            print(f"  {icon('warn')} ignoring your changes to {bname}: {exc}")
+            builtin = load_profile(bname, {})
+        tuned = " (tuned in your config)" if builtin.source != "built-in" else ""
+        profiles.append((bname, builtin, builtin.description + tuned))
     for pname in cfg.get("profiles", {}):
+        if pname in BUILTIN_PROFILE_SPECS:
+            continue
         try:
             saved = load_profile(pname, cfg)
-            profiles.append((pname, saved, "your folders: " + ", ".join(saved.roots())))
+            what = f"tuned {saved.layout}: " if saved.builtin else "your folders: "
+            profiles.append((pname, saved, what + ", ".join(saved.roots())))
         except ValueError as exc:
             print(f"  {icon('warn')} skipping saved profile {pname}: {exc}")
     profiles.append(("create your own...", None, "name your folders and say what goes in each"))
@@ -2433,7 +2588,7 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
         profile=profile,
         backend=backend,
         second=second,
-        thresholds=Thresholds(args.min_confidence, args.screenshot_min_confidence, args.delete_min_prob),
+        thresholds=profile.thresholds(threshold_flags(args)),
         timeout_s=args.timeout_s,
         progress=True,
         progress_width=args.progress_width,
@@ -2499,12 +2654,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument("--url", default="", help="Override the backend URL")
     p.add_argument("--config", default="", help="Config file (default: $XDG_CONFIG_HOME/sortling/config.json)")
     p.add_argument("--init-config", action="store_true", help="Write a starter config with all backends and exit")
+    p.add_argument("--show-profile", nargs="?", const="", metavar="NAME",
+                   help="Print a profile as JSON (questions, options, thresholds) and exit; no NAME shows what a run would use")
     p.add_argument("--setup", action="store_true", help="Add, test and choose models interactively, then exit")
     p.add_argument("--list-backends", action="store_true", help="Show configured backends and exit")
     p.add_argument("--disable-llm", action="store_true", help="Skip all models and use filename keywords")
-    p.add_argument("--min-confidence", type=float, default=0.6, help="Below this, documents go to _review")
-    p.add_argument("--screenshot-min-confidence", type=float, default=0.4, help="Below this topic probability, screenshots go to screenshots/other")
-    p.add_argument("--delete-min-prob", type=float, default=0.85, help="Minimum junk probability for _delete")
+    # threshold flags default to None so the profile's own thresholds apply unless one is given
+    p.add_argument("--min-confidence", type=float, help="Below this, documents go to _review (default: the profile's, 0.6)")
+    p.add_argument("--screenshot-min-confidence", type=float,
+                   help="Below this topic probability, screenshots go to screenshots/other (default: the profile's, 0.4)")
+    p.add_argument("--delete-min-prob", type=float, help="Minimum junk probability for _delete (default: the profile's, 0.85)")
     p.add_argument("--delete-exact-duplicates", action="store_true", help="Delete exact duplicates instead of moving them to _duplicates")
     p.add_argument("--hard-delete-delete-candidates", action="store_true", help="Hard-delete junk instead of moving it to _delete")
     p.add_argument("--timeout-s", type=int, default=120, help="Model request timeout (seconds)")
@@ -2526,6 +2685,22 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
+def profile_payload(profile: Profile, flags: dict) -> dict:
+    """What a run with this profile asks and how it decides, as JSON."""
+    out: dict = {"name": profile.name, "layout": profile.layout, "source": profile.source, "description": profile.description}
+    if profile.folders:
+        out["folders"] = profile.folders
+    out["thresholds"] = asdict(profile.thresholds(flags))
+    out["questions"] = profile.spec.get("questions", {})
+    if "category_aliases" in profile.spec:
+        out["category_aliases"] = profile.spec["category_aliases"]
+    return out
+
+
+def threshold_flags(args: argparse.Namespace) -> dict:
+    return {k: getattr(args, k) for k in THRESHOLD_KEYS}
+
+
 def resolve_backends(args: argparse.Namespace, cfg: dict) -> Tuple[Backend, Optional[Backend]]:
     name = args.backend or cfg.get("default_backend", "")
     return make_backends(name, cfg, url=args.url, second=args.second_pass)
@@ -2537,7 +2712,7 @@ def resolve_profile(args: argparse.Namespace, cfg: dict, root: Path) -> Profile:
         return load_profile_file(args.profile_file, cfg)
     if args.profile:
         return load_profile(args.profile, cfg)
-    return local_profile(root, cfg) or DEFAULT_PROFILE
+    return local_profile(root, cfg) or load_profile("default", cfg)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -2548,7 +2723,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if cfg_file.exists():
             print(f"config already exists: {cfg_file}")
             return 1
-        save_config(cfg_file, DEFAULT_CONFIG)
+        starter = json.loads(json.dumps(DEFAULT_CONFIG))
+        starter["profiles"] = {"default": {"_note": PROFILE_TUNING_NOTE}}
+        save_config(cfg_file, starter)
         print(f"wrote {cfg_file}")
         return 0
     if args.undo:
@@ -2569,6 +2746,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         except KeyboardInterrupt:
             print("\ncancelled.")
             return 130
+
+    if args.show_profile is not None:
+        try:
+            if args.show_profile:
+                profile = load_profile(args.show_profile, cfg)
+            else:
+                profile = resolve_profile(args, cfg, Path(args.root or ".").expanduser().resolve())
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(profile_payload(profile, threshold_flags(args)), ensure_ascii=False, indent=2))
+        return 0
 
     if args.list_backends:
         for n in cfg["backends"]:
@@ -2605,7 +2794,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         profile=profile,
         backend=backend,
         second=second,
-        thresholds=Thresholds(args.min_confidence, args.screenshot_min_confidence, args.delete_min_prob),
+        thresholds=profile.thresholds(threshold_flags(args)),
         vision_mode=args.vision_mode,
         vision_min_text_chars=args.vision_min_text_chars,
         max_pages=args.max_pages,
