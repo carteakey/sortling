@@ -42,7 +42,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 
 # ---------------------------------------------------------------------------
