@@ -44,12 +44,16 @@ def main() -> int:
     args = p.parse_args()
 
     expected = {k: v for k, v in json.loads((HERE / "expected.json").read_text()).items() if not k.startswith("_")}
+    # optional local-only sets from the user's own files: tests/expected.local.json + tests/fixtures-local/
+    local = HERE / "expected.local.json"
+    local_sets = {k: v for k, v in json.loads(local.read_text()).items() if not k.startswith("_")} if local.exists() else {}
+    expected.update(local_sets)
     sets = [s for s in args.sets.split(",") if s] or list(expected)
     want_profiles = [s for s in args.profiles.split(",") if s]
 
     jobs = []
     for name in sets:
-        root = HERE / "fixtures" / name
+        root = HERE / ("fixtures-local" if name in local_sets else "fixtures") / name
         if not root.is_dir():
             print(f"error: {root} missing; run tests/make_fixtures.sh first", file=sys.stderr)
             return 2

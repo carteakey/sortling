@@ -5,3 +5,5 @@ temp
 PLAN.md
 tests/fixtures/
 temp/
+tests/fixtures-local/
+tests/expected.local.json

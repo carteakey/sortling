@@ -88,6 +88,8 @@ _sortling/     manifests (CSV + JSON) for every run
 
 - **Records are documents, whatever the format.** A screenshot of a receipt, booking or
   order confirmation, or a photo of a paper form, goes to `docs/<category>` next to the PDFs.
+  Every image gets a direct yes/no question ("is this a record worth keeping?"), because
+  models tend to call an order-confirmation screenshot just a "screenshot".
 - **Other screenshots are filed by topic.** Unsure ones go to `screenshots/other`, not
   `_review`: a misfiled screenshot costs little.
 - **Camera photos get a few coarse folders on purpose.** Photo apps do faces and places better.
@@ -221,7 +223,8 @@ Useful flags:
 - `--types pdf,image`, `--recursive-source`
 - `--profile NAME`, `--profile-file JSON|-`, `--backend NAME`, `--second-pass NAME`, `--url URL`
 - `--json`: the plan as JSON on stdout
-- `--min-confidence` (0.6), `--screenshot-min-confidence` (0.4), `--delete-min-prob` (0.85):
+- `--min-confidence` (0.6), `--screenshot-min-confidence` (0.3), `--delete-min-prob` (0.85),
+  `--record-min-prob` (0.5):
   override the profile's thresholds for one run
 - `--show-profile [NAME]`: print a profile's questions, options and thresholds as JSON
 - `--delete-exact-duplicates`, `--hard-delete-delete-candidates`: real deletes, off by default

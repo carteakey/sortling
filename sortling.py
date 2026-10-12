@@ -83,8 +83,11 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
         "thresholds": {
             # below this, the image kind or document category is unsure: _review
             "min_confidence": 0.6,
-            # below this topic probability, screenshots go to screenshots/other
-            "screenshot_min_confidence": 0.4,
+            # below this topic probability, screenshots go to screenshots/other. 0.3, not 0.4: on real
+            # screenshots the right topic often wins with only 0.33-0.37 (eval set screens-real)
+            "screenshot_min_confidence": 0.3,
+            # a "yes, it's a record" this sure files a screenshot or photo as a document
+            "record_min_prob": 0.5,
             # junk probability needed for _delete
             "delete_min_prob": 0.85,
         },
@@ -111,6 +114,14 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
                 "instructions": (
                     "Is this junk with no lasting value, such as an ad, spam, or a blurry, "
                     "accidental, blank or black photo or screenshot?"
+                ),
+            },
+            # records: models call an order-confirmation screenshot a "screenshot" even when the kind
+            # description names it, so a direct yes/no question decides instead
+            "record": {
+                "instructions": (
+                    "Is this a record worth keeping: a receipt, an order, booking or payment confirmation, "
+                    "a ticket, a bill, an ID or a statement?"
                 ),
             },
             # documents: docs/<category>
@@ -185,7 +196,7 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
 }
 # the questions each built-in layout asks; the rest of an inherited spec is unused
 LAYOUT_QUESTIONS: Dict[str, Tuple[str, ...]] = {
-    "default": ("kind", "junk", "category", "core", "topic", "photo"),
+    "default": ("kind", "junk", "record", "category", "core", "topic", "photo"),
     "photos": ("kind", "junk", "photo"),
 }
 # options the routing code depends on
@@ -952,6 +963,7 @@ class Thresholds:
     min_confidence: float
     screenshot_min_confidence: float
     delete_min_prob: float
+    record_min_prob: float
 
 
 THRESHOLD_KEYS: Tuple[str, ...] = tuple(f.name for f in fields(Thresholds))
@@ -1185,6 +1197,7 @@ def build_questions(profile: Profile, kind: str, has_image: bool) -> dict:
         return {
             "kind": image_kind,
             "junk": junk,
+            "record": {"type": "noul", "instructions": profile.question("record")["instructions"]},
             "category": category,
             "topic": choice("topic"),
             "photo": photo,
@@ -1234,7 +1247,14 @@ def route(profile: Profile, answers: dict, th: Thresholds) -> Routed:
         reason = f"decision:{image_kind}={kind_p:.2f},junk={junk_p:.2f}"
         if junk_p >= th.delete_min_prob:
             return Routed(f"{image_kind}:junk", "delete_candidate", DELETE_FOLDER, junk_p, reason)
-        if kind_p < th.min_confidence:
+        record_p = to_float_0_1(answers["record"].get("noul")) if "record" in answers else 0.0
+        if "record" in answers:
+            reason += f",record={record_p:.2f}"
+        if image_kind != "document" and record_p >= th.record_min_prob:
+            # a screenshot or photo of a receipt, ticket or confirmation is filed with the docs
+            image_kind = "document"
+            reason += " | record->docs"
+        elif kind_p < th.min_confidence:
             # can't tell whether it is a record; a person should look
             return Routed("unknown", "review", REVIEW_FOLDER, kind_p, reason + " | kind-unsure->review", True)
         if image_kind == "meme":
@@ -2663,8 +2683,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     # threshold flags default to None so the profile's own thresholds apply unless one is given
     p.add_argument("--min-confidence", type=float, help="Below this, documents go to _review (default: the profile's, 0.6)")
     p.add_argument("--screenshot-min-confidence", type=float,
-                   help="Below this topic probability, screenshots go to screenshots/other (default: the profile's, 0.4)")
+                   help="Below this topic probability, screenshots go to screenshots/other (default: the profile's, 0.3)")
     p.add_argument("--delete-min-prob", type=float, help="Minimum junk probability for _delete (default: the profile's, 0.85)")
+    p.add_argument("--record-min-prob", type=float,
+                   help="A screenshot or photo this likely to be a receipt, ticket or confirmation is filed as a document (default: the profile's, 0.5)")
     p.add_argument("--delete-exact-duplicates", action="store_true", help="Delete exact duplicates instead of moving them to _duplicates")
     p.add_argument("--hard-delete-delete-candidates", action="store_true", help="Hard-delete junk instead of moving it to _delete")
     p.add_argument("--timeout-s", type=int, default=120, help="Model request timeout (seconds)")

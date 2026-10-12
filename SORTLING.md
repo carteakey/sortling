@@ -32,8 +32,8 @@ python3 sortling.py --undo <manifest.json>                               # put e
   `--profile-file <file.json>` (`-` reads stdin).
 - **Pick a backend:** `--backend <name>` (see `--list-backends`). Add `--second-pass <name>`
   for a hybrid run.
-- **Thresholds** (rarely needed): `--min-confidence 0.6`, `--screenshot-min-confidence 0.4`,
-  `--delete-min-prob 0.85`. These override the profile's own thresholds.
+- **Thresholds** (rarely needed): `--min-confidence 0.6`, `--screenshot-min-confidence 0.3`,
+  `--delete-min-prob 0.85`, `--record-min-prob 0.5`. These override the profile's own thresholds.
 - **See what the model is asked:** `--show-profile [name]` prints the profile as JSON.
 
 Exit code 0 is success, 2 is a usage or config error. If no model is reachable, sortling
