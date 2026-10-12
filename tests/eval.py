@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Score sortling backends on the labelled fixtures (build them with tests/make_fixtures.sh).
+
+    python3 tests/eval.py --backend local-d3 --backend local-clef
+    python3 tests/eval.py --backend local-d3 --sets photos --profiles photos --misses
+
+Runs sortling.py as a dry run (nothing is moved) and compares each file's target folder
+with tests/expected.json. Uses your normal sortling config for backends unless --config
+is given.
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+SORTLING = HERE.parent / "sortling.py"
+
+
+def run(root: Path, backend: str, profile: str, config: str, timeout_s: int) -> dict:
+    with tempfile.TemporaryDirectory(prefix="sortling-eval-") as out:
+        cmd = [sys.executable, "-B", str(SORTLING), "--root", str(root), "--profile", profile, "--backend", backend,
+               "--json", "--no-progress", "--output-dir", out, "--timeout-s", str(timeout_s)]
+        if config:
+            cmd += ["--config", config]
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if proc.returncode != 0:
+            raise RuntimeError(f"sortling failed ({proc.returncode}): {proc.stderr.strip()[-400:]}")
+        return json.loads(proc.stdout)
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--backend", action="append", required=True, help="backend name from the sortling config (repeatable)")
+    p.add_argument("--sets", default="", help="comma-separated fixture sets (default: all in expected.json)")
+    p.add_argument("--profiles", default="", help="comma-separated profiles to score (default: all listed per set)")
+    p.add_argument("--config", default="", help="sortling config file")
+    p.add_argument("--timeout-s", type=int, default=300)
+    p.add_argument("--misses", action="store_true", help="print each wrong answer with the model's probabilities")
+    args = p.parse_args()
+
+    expected = {k: v for k, v in json.loads((HERE / "expected.json").read_text()).items() if not k.startswith("_")}
+    sets = [s for s in args.sets.split(",") if s] or list(expected)
+    want_profiles = [s for s in args.profiles.split(",") if s]
+
+    totals = {b: [0, 0] for b in args.backend}
+    rows = []
+    for name in sets:
+        root = HERE / "fixtures" / name
+        if not root.is_dir():
+            print(f"error: {root} missing; run tests/make_fixtures.sh first", file=sys.stderr)
+            return 2
+        for profile, truth in expected[name].items():
+            if want_profiles and profile not in want_profiles:
+                continue
+            for backend in args.backend:
+                t0 = time.time()
+                try:
+                    data = run(root, backend, profile, args.config, args.timeout_s)
+                except RuntimeError as exc:
+                    print(f"{name}/{profile}/{backend}: {exc}", file=sys.stderr)
+                    return 1
+                got = {r["file"]: r for r in data["records"]}
+                misses = []
+                for fname, want in truth.items():
+                    ok_set = want if isinstance(want, list) else [want]
+                    rec = got.get(fname)
+                    folder = rec["target_folder"] if rec else "(missing)"
+                    if folder not in ok_set:
+                        misses.append((fname, " or ".join(ok_set), folder, rec["reason"] if rec else ""))
+                right = len(truth) - len(misses)
+                totals[backend][0] += right
+                totals[backend][1] += len(truth)
+                fallback = data.get("classifier", "").startswith("fallback")
+                rows.append((name, profile, backend, right, len(truth), time.time() - t0, fallback, misses))
+
+    print(f"{'set':<14} {'profile':<9} {'backend':<14} {'score':>7}  {'time':>6}")
+    for name, profile, backend, right, n, secs, fallback, misses in rows:
+        note = "  (model unavailable: keyword fallback)" if fallback else ""
+        print(f"{name:<14} {profile:<9} {backend:<14} {right:>3}/{n:<3}  {secs:5.0f}s{note}")
+        if args.misses:
+            for fname, want, folder, reason in misses:
+                print(f"    x {fname}: want {want}, got {folder}  [{reason[:110]}]")
+    print()
+    for backend, (right, n) in totals.items():
+        print(f"total {backend:<14} {right}/{n} ({100 * right / max(n, 1):.0f}%)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

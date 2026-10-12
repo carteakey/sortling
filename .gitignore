@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 _sortling/
 PLAN.md
+tests/fixtures/

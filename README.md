@@ -170,6 +170,20 @@ filename keywords and records why in `PRECHECK` and in each record's `classifier
   the new layout is manual.
 - **Manifests have moved:** they're now in `_sortling/` (was `_pdf_ai_logs/`).
 
+## Tests
+
+Labelled fixtures check that a change to prompts, categories, thresholds or models doesn't
+quietly misfile things. The images are generated, not committed:
+
+```bash
+tests/make_fixtures.sh                              # builds tests/fixtures/ (ImageMagick, DejaVu fonts, curl)
+python3 tests/eval.py --backend local-d3 --backend local-clef --misses
+```
+
+There are three sets: documents and screenshots, the same files with neutral names
+(so filenames can't give the answer away), and photos with memes and junk.
+Expected folders are in `tests/expected.json`.
+
 ## Art
 
 The pixel wizard is in [`assets/`](assets/): poses (`wizard`, `wizard-reading`,
