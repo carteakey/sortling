@@ -781,13 +781,13 @@ def read_user_config(path: Path) -> dict:
 
 
 def is_hosted_url(url: str) -> bool:
-    """True unless the host is loopback, private, link-local or a bare LAN name."""
+    """True for public internet hosts. Loopback, private, link-local and Tailscale/CGNAT
+    addresses (100.64.0.0/10), MagicDNS (*.ts.net) and bare LAN names count as local."""
     host = (urllib.parse.urlparse(url).hostname or "").lower()
-    if not host or host == "localhost" or host.endswith((".local", ".lan", ".home", ".internal")):
+    if not host or host == "localhost" or host.endswith((".local", ".lan", ".home", ".internal", ".ts.net")):
         return False
     try:
-        ip = ipaddress.ip_address(host)
-        return not (ip.is_private or ip.is_loopback or ip.is_link_local)
+        return ipaddress.ip_address(host).is_global
     except ValueError:
         return "." in host
 
@@ -1418,6 +1418,8 @@ class DocRecord:
     result: str = ""
     error: str = ""
     second_pass: str = ""
+    # seconds the model took for this file (0 when no model was asked)
+    seconds: float = 0.0
 
 
 def file_kind(path: Path) -> str:
@@ -2211,6 +2213,24 @@ def classify(backend: Backend, fi: FileInput, opts: RunOptions) -> Tuple[Routed,
     return routed, err
 
 
+def pdf_renderer_available() -> bool:
+    try:
+        import fitz  # type: ignore  # noqa: F401
+        return True
+    except ImportError:
+        return bool(shutil.which("pdftoppm") or shutil.which("qlmanage"))
+
+
+def latency_summary(records: Sequence["DocRecord"]) -> dict:
+    """Per-file model time: median, p90, max, and how many files were far slower than typical."""
+    t = sorted(r.seconds for r in records if r.seconds > 0)
+    if not t:
+        return {}
+    med = t[len(t) // 2]
+    return {"files_asked": len(t), "median_s": round(med, 2), "p90_s": round(t[min(len(t) - 1, 9 * len(t) // 10)], 2),
+            "max_s": round(t[-1], 2), "slow_files": sum(1 for x in t if x > max(5.0, 8 * med))}
+
+
 def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None) -> List[DocRecord]:
     root = opts.root
     source_files = list_source_files(root, opts.recursive, opts.kinds, opts.profile)
@@ -2220,9 +2240,15 @@ def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None
     stage_note("Stage 1/3: scanning duplicates", opts.progress)
     duplicate_of = build_duplicate_lookup(root, source_files, opts.kinds, opts.progress, opts.progress_width)
 
+    if any(file_kind(p) == "pdf" for p in source_files) and not pdf_renderer_available():
+        print(f"{icon('warn')} no PDF renderer (PyMuPDF, pdftoppm or qlmanage): scanned PDFs with no text are "
+              "judged by filename only. Install poppler (pdftoppm) to fix.", file=sys.stderr)
+
     stage_note("Stage 2/3: extracting + classifying files", opts.progress)
     bar = make_bar(len(source_files), "Classify", opts.progress, opts.progress_width, opts.face)
     consecutive_timeouts = 0
+    timings: List[float] = []
+    warned_slow = False
     records: List[DocRecord] = []
     uncertain: List[Tuple[DocRecord, FileInput]] = []
     for idx, path in enumerate(source_files, start=1):
@@ -2235,6 +2261,7 @@ def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None
             classifier = opts.status if backend is None else f"{backend.mode}:{backend.name}"
 
         is_uncertain = False
+        asked = 0.0
         rule_folder = file_folder(opts.profile, path) if fi.kind == "file" else ""
         if fi.kind == "doc" and not readable(fi.text):
             # a document we couldn't read: sort it by its extension instead
@@ -2243,7 +2270,18 @@ def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None
             routed = Routed(f"file:{rule_folder.rsplit('/', 1)[-1]}", "keep", rule_folder, 1.0, f"rule:extension {path.suffix.lower()}")
             classifier = "rule:extension"
         elif backend is not None:
+            t_ask = time.time()
             routed, err = classify(backend, fi, opts)
+            asked = time.time() - t_ask
+            timings.append(asked)
+            # a shared router reloading the model (another app asked for a different one) stalls
+            # files without any error; say so instead of looking slow for no reason
+            if len(timings) > 5 and not warned_slow:
+                typical = sorted(timings)[len(timings) // 2]
+                if asked > max(5.0, 8 * typical):
+                    warned_slow = True
+                    print(f"\n{icon('warn')} {path.name} took {asked:.0f}s against a typical {typical:.1f}s: the model "
+                          "may be reloading (is another app using the same server?)", file=sys.stderr)
             is_uncertain = err is None and routed.uncertain
             if err is not None:
                 classifier = f"fallback:{type(err).__name__}"
@@ -2258,6 +2296,7 @@ def plan(opts: RunOptions, on_file: Optional[Callable[[DocRecord], None]] = None
             routed = fallback_classify(opts.profile, path.name, fi.text)
 
         rec = make_record(root, fi, routed, classifier, duplicate_of)
+        rec.seconds = round(asked, 3)
         assign_action(rec, opts.delete_exact_duplicates, opts.hard_delete)
         records.append(rec)
         if is_uncertain and not rec.duplicate_of:
@@ -2395,6 +2434,7 @@ def manifest_payload(opts: RunOptions, records: Sequence[DocRecord], dry_run: bo
         "summary": {
             "files": len(records),
             "by_folder": {f: sum(1 for r in records if r.target_folder == f) for f in sorted({r.target_folder for r in records})},
+            "latency": latency_summary(records),
         },
         "records": [asdict(r) for r in records],
     }
