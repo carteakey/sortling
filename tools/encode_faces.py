@@ -3,10 +3,9 @@
 banner hero) into sortling.py's embedded sprites.
 
     python3 tools/encode_faces.py            # rewrite the FACES block in sortling.py
-    python3 tools/encode_faces.py --width 34 --check
+    python3 tools/encode_faces.py --width 28 --check
 
-Needs ImageMagick to read the PNGs. Each head is point-sampled to --width pixels (so pixel
-art stays crisp), alpha is cut at 50%, colors go into one shared palette, and everything
+Needs ImageMagick to read the PNGs. Each head is area-averaged to --width pixels, alpha is cut at 50%, colors go into one shared palette, and everything
 is zlib-compressed and base64-encoded between the "FACES BEGIN/END" markers.
 """
 
@@ -31,26 +30,27 @@ IM = shutil.which("magick") or shutil.which("convert")
 
 def shared_palette(paths, width: int, colors: int, out: Path) -> None:
     """One palette for all heads, so every frame indexes the same colors."""
-    subprocess.run([IM, *map(str, paths), "-sample", f"{width}x", "-background", "none", "+append",
+    subprocess.run([IM, *map(str, paths), "-filter", "box", "-resize", f"{width}x", "-background", "none", "+append",
                     "-alpha", "off", "+dither", "-colors", str(colors), "-unique-colors", str(out)], check=True)
 
 
 def rgba(path: Path, width: int, palette_png: Path):
-    sampled = [IM, str(path), "-sample", f"{width}x"]
+    # the art isn't on a true pixel grid, so area-average: point sampling drops eye and mouth pixels
+    sampled = [IM, str(path), "-filter", "box", "-resize", f"{width}x"]
     size = subprocess.run([*sampled, "-format", "%w %h", "info:"], capture_output=True, text=True, check=True).stdout.split()
     w, h = int(size[0]), int(size[1])
     # -remap drops alpha, so colors and the transparency mask are read separately
     rgb = subprocess.run([*sampled, "-alpha", "off", "+dither", "-remap", str(palette_png), "-depth", "8", "rgb:-"],
                          capture_output=True, check=True).stdout
-    mask = subprocess.run([*sampled, "-alpha", "extract", "-threshold", "50%", "-depth", "8", "gray:-"],
+    mask = subprocess.run([*sampled, "-alpha", "extract", "-threshold", "45%", "-depth", "8", "gray:-"],
                           capture_output=True, check=True).stdout
     return w, h, [(*rgb[i * 3:i * 3 + 3], mask[i]) for i in range(w * h)]
 
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--width", type=int, default=34)
-    p.add_argument("--colors", type=int, default=64)
+    p.add_argument("--width", type=int, default=28)
+    p.add_argument("--colors", type=int, default=48)
     p.add_argument("--hero-width", type=int, default=38)
     p.add_argument("--check", action="store_true", help="print sizes, don't write")
     args = p.parse_args()

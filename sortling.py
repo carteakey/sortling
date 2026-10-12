@@ -197,7 +197,8 @@ def color(text: str, code: str) -> str:
 
 
 def print_banner() -> None:
-    tagline = f"tidy screenshots, downloads and documents with decision models  v{__version__}"
+    sparkle = " ✨" if unicode_ok() else ""
+    tagline = f"a tiny wizard who sorts your screenshots, downloads and documents{sparkle}  v{__version__}"
     mode = face_mode(sys.stdout) if HERO_DATA else ""
     forced = os.environ.get("SORTLING_FACE", "").lower() == "force"
     art = BANNER_ART.strip("\n").split("\n")
@@ -277,114 +278,81 @@ def stage_note(message: str, enabled: bool) -> None:
 # packed by tools/encode_faces.py from assets/faces/head-*.png; regenerate there, don't edit by hand
 # --- FACES BEGIN
 FACES_DATA = (
-    "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"
-    "751DzyqfMcMpNMsPRIZ//qmi4L///X+kacan"
+    "eNq1W9Fy4ri2/Zc8zwMhJHGm6j5ItowFuDuycYJz6z6AAUEg7e64ewTn1Pn3s7ZsEttAeu7MdFcxYYIiy/JeWnutvfn3hbn4"
+    "vev8drHCj6vfLr5Ot4vv3xcXv//vxeW00+tcX/x2cXvTXV46eDO77GXdDG+us2738hZvrnqXl5cdvFnMbmbdJd5k2bVjx9w4"
+    "3evLO7yZ926ur2iMs7y67dI8t71u1u3hTW95eXtJl1hMMTcNXt7NO9dz+s31HS5CfzW9ur2c0YSzbq97iTfdm85th+aZdq67"
+    "XZp57tzOOjd09fnsdkpXX15ldzNa4c3d9d31jf3N/C6zl7hZ3M7tb2aL6XxK88zuZnd0rd70qndFb6ZXV127wuV8ebmgizrz"
+    "2+7N1C7j+vqafrOcLhb2o/l03slowu6y2+3aW3YyZ0a/uZs617dTe63pzd2tva/p/I42qnd3teh17cKur7o0ZnFbXf2y17m5"
+    "pD/vLe6mC7r3q8vbTlZu1PXiumPvfZbh6v+Hv3+dviyKi9//fVG8rLd4dBfs5D/hMhMK9sE/rmSf68zjRp8fpDd9V4Weq3PP"
+    "PTsmHXCzwZgidHUYnhvDTOcz5hlxpYauNkdDPJYGzPQ+e9pRQpnYY/poLqFDj5n83lOde7YSkdAsPr4vzL/DZ7swEfRTta8l"
+    "hGAp7p3WFA6ZNqHL8bv6NnCpuAlDrpKQ6SxwVYb7w0awpD6RYsbEQicP/iqd+EYr2k9Xax+fvM3kroTAPA99vpn2I/3Y3xn8"
+    "3SYIlKqtXY0EjVn1FoF95Wl/54hA4drs7THGrlEaY576UTmu74qn/k76rL7vXPo+fe4yO0bqZBasNhrrlF5t8XKXL4J1mNnr"
+    "rRUf4G/6Jok8VgsbN3warNOHAdeT/q5Y9Hfpi79K/MYYxvz+Pn2htftRQdd8xN8sa3tQrcs8HNZt177SM66OQ0XuGfYhn9rX"
+    "OtFMnQ47uQ+fDy/2a/79D6C3mn79uj8NM84oIkwoz8+AR29smAFm7TB0PvmHUNObgELRNbnX2pJ7b6UOY7xyjJGAkd+AjulR"
+    "XEoa46qOh5ALhdaj97mce5qLHhWFqKd6n4UpIs5lLFby/VrasWEmDN1Xx0LRZZof37kMOcslwHXvGWeMMZF3BFU5BsToiMGa"
+    "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"
+    "tuBZlP3nP/8FIMNFEg=="
 )
 # --- FACES END
 # --- HERO BEGIN
@@ -901,6 +869,28 @@ def make_backends(name: str, cfg: dict, url: str = "", second: str = "") -> Tupl
         bcfg.pop("hosted", None)
     first_backend = make_backend(name, bcfg)
     return first_backend, (make_backend(second_name, backends[second_name]) if second_name else None)
+
+
+MODE_BLURBS: Dict[str, str] = {
+    "fast": "decision model: one quick pass per file, real probabilities",
+    "thorough": "chat model: explains each file; slower; confidence is self-reported",
+    "hybrid": "fast on everything, thorough only on the files fast is unsure about",
+}
+
+
+def backend_row(name: str, cfg: dict, star: bool = False) -> Tuple[str, str, str]:
+    """(label, value, description) for menus: name first, then mode and where it runs."""
+    bcfg = cfg["backends"][name]
+    mark = ("★ " if unicode_ok() else "* ") if star else "  "
+    if bcfg.get("type") == "hybrid":
+        label = f"{mark}{name:<22} {icon('hybrid')} hybrid"
+        desc = f"{bcfg.get('first')} first, {bcfg.get('second')} re-checks unsure files · {MODE_BLURBS['hybrid']}"
+        return label, name, desc
+    b = make_backend(name, bcfg)
+    where = f"{icon('hosted')} hosted" if b.hosted else f"{icon('local')} local"
+    eyes = "" if b.vision else "  text only"
+    label = f"{mark}{name:<22} {icon(b.mode)} {b.mode:<9} {where}{eyes}"
+    return label, name, f"{b.label or b.url} · {MODE_BLURBS[b.mode]}"
 
 
 def describe_entry(name: str, cfg: dict) -> str:
@@ -2024,18 +2014,21 @@ def _filtered(options: Sequence[Tuple[str, object]], query: str) -> List[Tuple[s
             return 0
         return 1 if re.search(r"(^|[\s/_-])" + re.escape(q), text) else 2
 
-    hits = [(rank(o[0]), i, o) for i, o in enumerate(options) if q in _visible(o[0]).lower()]
+    hits = [(rank(o[0]), i, o) for i, o in enumerate(options)
+            if q in _visible(o[0]).lower() + " " + (str(o[2]).lower() if len(o) > 2 else "")]
     return [o for _, _, o in sorted(hits, key=lambda t: (t[0], t[1]))]
 
 
-def select(title: str, options: Sequence[Tuple[str, object]], default: int = 1, hint: str = "") -> object:
+def select(title: str, options: Sequence[tuple], default: int = 1, hint: str = "") -> object:
     """Arrow-key menu: ↑/↓ moves, Enter picks, typing filters, Esc clears the filter.
-    Without a terminal it falls back to a numbered prompt."""
+    Options are (label, value) or (label, value, description); the description of the
+    highlighted option shows under the list. Without a terminal it falls back to numbers."""
+    descs = {id(o): (o[2] if len(o) > 2 else "") for o in options}
     if not menus_supported():
         if title:
             print(color(title, "1"))
-        for i, (label, _) in enumerate(options, start=1):
-            print(f"  {i}) {label}")
+        for i, opt in enumerate(options, start=1):
+            print(f"  {i}) {opt[0]}" + (color(f"  {opt[2]}", "2") if len(opt) > 2 and opt[2] else ""))
         while True:
             raw = ask("  choose", str(default))
             if raw.isdigit() and 1 <= int(raw) <= len(options):
@@ -2043,6 +2036,7 @@ def select(title: str, options: Sequence[Tuple[str, object]], default: int = 1, 
                 return options[int(raw) - 1][1]
             print("  enter a number from the list")
 
+    has_desc = any(descs.values())
     query, cur, top, drawn = "", max(0, default - 1), 0, 0
     width = max(30, shutil.get_terminal_size((80, 24)).columns - 4)
     view = max(5, min(12, shutil.get_terminal_size((80, 24)).lines - 6))
@@ -2071,6 +2065,9 @@ def select(title: str, options: Sequence[Tuple[str, object]], default: int = 1, 
                     lines.append(color("   (nothing matches)", "2"))
                 if top + view < len(shown):
                     lines.append(color("   ↓ more", "2"))
+                if has_desc:
+                    lines.append("")
+                    lines.append(color("   " + _fit(descs.get(id(shown[cur]), "") if shown else "", width - 3), "37"))
                 lines.append(color(f"   {help_line}", "2"))
                 if drawn:
                     sys.stdout.write(f"\033[{drawn}F\033[J")
@@ -2088,7 +2085,7 @@ def select(title: str, options: Sequence[Tuple[str, object]], default: int = 1, 
                 elif key == "pgdn":
                     cur = min(len(shown) - 1, cur + view) if shown else 0
                 elif key == "enter" and shown:
-                    label, value = shown[cur]
+                    label, value = shown[cur][0], shown[cur][1]
                     # collapse the menu to one line showing the choice
                     sys.stdout.write(f"\033[{drawn}F\033[J")
                     summary = (color(title, "1") + " " if title else "") + color(_fit(_visible(label), width - len(title) - 2), "36")
@@ -2231,12 +2228,12 @@ def _pick_model(base: str, key_env: str, title: str) -> str:
 
 def add_backend_wizard(cfg: dict, cfg_file: Path) -> Optional[str]:
     kind = select("What kind of model?", [
-        (f"{icon('fast')} local decision model    llama.cpp or llama-swap /v1/systemone", "systemone"),
-        (f"{icon('fast')} TypeSafe Jev           hosted, text only", "jev"),
-        (f"{icon('thorough')} local chat model       llama-swap, Ollama, LM Studio, vLLM", "chat-local"),
-        (f"{icon('thorough')} hosted chat model      OpenAI, OpenRouter or another OpenAI-compatible API", "chat-hosted"),
-        (f"{icon('hybrid')} hybrid                 a fast model first, a chat model for the unsure files", "hybrid"),
-        ("back", None),
+        (f"{icon('fast')} local decision model", "systemone", "llama.cpp or llama-swap serving /v1/systemone"),
+        (f"{icon('fast')} TypeSafe Jev", "jev", "hosted decision model, text only"),
+        (f"{icon('thorough')} local chat model", "chat-local", "llama-swap, Ollama, LM Studio or vLLM"),
+        (f"{icon('thorough')} hosted chat model", "chat-hosted", "OpenAI, OpenRouter or another OpenAI-compatible API"),
+        (f"{icon('hybrid')} hybrid", "hybrid", "a fast model first, a chat model for the files it's unsure about"),
+        ("  back", None, ""),
     ])
     if kind is None:
         return None
@@ -2311,9 +2308,13 @@ def setup_wizard(cfg_file: Path) -> dict:
         user = read_user_config(cfg_file)
         default = cfg.get("default_backend")
         star = "★" if unicode_ok() else "*"
-        rows = [((f"{star} " if n == default else "  ") + describe_entry(n, cfg), ("edit", n)) for n in cfg["backends"]]
-        rows += [("+ add a model...", ("add", "")), ("done", ("done", ""))]
-        action, name = select(f"Models  ({star} = default, saved in {cfg_file})", rows, default=len(rows))  # type: ignore[misc]
+        rows = []
+        for n in cfg["backends"]:
+            label, _, desc = backend_row(n, cfg, star=n == default)
+            rows.append((label, ("edit", n), desc))
+        rows += [("  + add a model...", ("add", ""), "a decision model, Jev, a chat model, or a hybrid of two"),
+                 ("  done", ("done", ""), f"saved in {cfg_file}")]
+        action, name = select(f"Models ({star} = default)", rows, default=len(rows))  # type: ignore[misc]
         if action == "done":
             return cfg
         if action == "add":
@@ -2350,13 +2351,13 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
     shots = screenshot_dir()
     downloads = Path.home() / "Downloads"
     desktop = Path.home() / "Desktop"
-    targets: List[Tuple[str, object]] = [
-        (f"Screenshots   {shots}  ({describe_counts(shots)})", (shots, ("image",))),
-        (f"Downloads     {downloads}  ({describe_counts(downloads)})", (downloads, ("pdf", "image"))),
+    targets: List[tuple] = [
+        (f"Screenshots   {describe_counts(shots)}", (shots, ("image",)), f"{shots} · images only"),
+        (f"Downloads     {describe_counts(downloads)}", (downloads, ("pdf", "image")), str(downloads)),
     ]
     if desktop != shots:
-        targets.append((f"Desktop       {desktop}  ({describe_counts(desktop)})", (desktop, ("pdf", "image"))))
-    targets.append(("Another folder...", None))
+        targets.append((f"Desktop       {describe_counts(desktop)}", (desktop, ("pdf", "image")), str(desktop)))
+    targets.append(("Another folder...", None, "type a path; Tab completes"))
     picked = ask_choice("What do you want to tidy?", targets)
     if picked is None:
         root = Path(ask("  folder path", paths=True)).expanduser()
@@ -2377,31 +2378,28 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
         print(f"  {icon('warn')} ignoring {root / LOCAL_PROFILE_FILE}: {exc}\n")
         here = None
     if here is not None:
-        profiles.append((f"{LOCAL_PROFILE_FILE:<9} this folder's own profile: {', '.join(here.roots())}", here))
+        profiles.append((LOCAL_PROFILE_FILE, here, "this folder's own profile: " + ", ".join(here.roots())))
     for bname, builtin in BUILTIN_PROFILES.items():
-        profiles.append((f"{bname:<9} {builtin.description}", builtin))
+        profiles.append((bname, builtin, builtin.description))
     for pname in cfg.get("profiles", {}):
         try:
             saved = load_profile(pname, cfg)
-            profiles.append((f"{pname:<9} {', '.join(saved.roots())}", saved))
+            profiles.append((pname, saved, "your folders: " + ", ".join(saved.roots())))
         except ValueError as exc:
             print(f"  {icon('warn')} skipping saved profile {pname}: {exc}")
-    profiles.append(("create your own...", None))
+    profiles.append(("create your own...", None, "name your folders and say what goes in each"))
     picked_profile = ask_choice("How should files be sorted?", profiles)
     profile = create_profile_wizard(cfg_file) if picked_profile is None else picked_profile
     assert isinstance(profile, Profile)
 
     # 3. which model
     names = list(cfg["backends"])
-    print(color("Which model?", "1"))
-    print(f"  {icon('fast')} fast      decision model: one quick pass per file, real probabilities. Best default.")
-    print(f"  {icon('thorough')} thorough  a general chat LLM: explains each file, slower, confidence is self-reported,")
-    print("               so the review/delete thresholds are less trustworthy.")
-    print(f"  {icon('hybrid')} hybrid    fast on everything, thorough only on the files fast is unsure about.")
     while True:
         default_idx = next((i for i, n in enumerate(names, start=1) if n == cfg.get("default_backend")), 1)
         gear = "⚙" if unicode_ok() else "*"
-        picked = ask_choice("", [(describe_entry(n, cfg), n) for n in names] + [(f"{gear} set up models...", None)], default_idx)
+        rows = [backend_row(n, cfg, star=n == cfg.get("default_backend")) for n in names]
+        rows.append((f"  {gear} set up models...", None, "add a model, test one, change the default"))
+        picked = ask_choice("Which model?", rows, default_idx)
         if picked is not None:
             picked_name = str(picked)
             break

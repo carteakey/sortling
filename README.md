@@ -238,8 +238,9 @@ The pixel wizard lives in [`assets/`](assets/):
   <img src="assets/poses/sortling_success.png" alt="the wizard cheering beside a folder with a check mark" width="190">
 </p>
 
-The terminal face (from `assets/faces/head-*.png`, 34×28 px) and the banner hero (from
+The terminal face (from `assets/faces/head-*.png`, 28×23 px) and the banner hero (from
 `assets/poses/sortling_idle.png`, 38 px wide) are packed into `sortling.py` by
-`python3 tools/encode_faces.py` (needs ImageMagick; about 12 KB together). Re-run it
+`python3 tools/encode_faces.py` (needs ImageMagick; about 8 KB together). The art is
+area-averaged when shrunk, so eyes and mouths don't lose pixels. Re-run it
 after changing the heads; `SORTLING_FACE=force` draws the face even without a terminal,
 for checking.
