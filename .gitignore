@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
 _sortling/
+temp
 PLAN.md
 tests/fixtures/
+temp/
