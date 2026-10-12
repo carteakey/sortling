@@ -3107,7 +3107,6 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
         thresholds=profile.thresholds(threshold_flags(args)),
         timeout_s=args.timeout_s,
         progress=True,
-        progress_width=args.progress_width,
         face=not args.no_face,
     )
     precheck_backend(opts)
@@ -3150,56 +3149,74 @@ def interactive(args: argparse.Namespace, cfg: dict, cfg_file: Path) -> int:
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    show_all = "--help-all" in argv
     p = argparse.ArgumentParser(
         prog="sortling",
-        description="Tidy screenshots, downloads and documents with decision models. Run with no arguments for interactive mode.",
+        description="Tidy screenshots, downloads and documents with decision models. Run with no arguments for the wizard.",
+        epilog=None if show_all else "More options (thresholds, deletion, model and display tweaks): --help-all",
     )
-    p.add_argument("--root", help="Folder to sort (scripted mode). Without it on a terminal, sortling asks.")
-    p.add_argument("-i", "--interactive", action="store_true", help="Force the interactive wizard")
-    p.add_argument("--apply", action="store_true", help="Apply moves/deletes. Default is dry-run")
-    p.add_argument("--undo", metavar="MANIFEST", help="Move files from an applied manifest back")
-    p.add_argument("--types", default=",".join(ALL_KINDS),
-                   help="Comma-separated kinds: pdf, image, doc (Office/text, read and asked about), file (sorted by extension). Default: all")
-    p.add_argument("--recursive-source", action="store_true", help="Also sort files in subfolders (not already-sorted ones)")
-    p.add_argument("--profile", default="", help="Sorting profile: default, photos, or one saved in the config")
-    p.add_argument("--profile-file", default="", metavar="JSON",
-                   help='Profile from a JSON file ("-" for stdin): {"folders": {"name": "what goes in it", ...}}')
-    p.add_argument("--backend", default="", help="Backend name from the config (default: config default_backend)")
-    p.add_argument("--second-pass", default="", metavar="BACKEND",
-                   help="Hybrid: re-check uncertain files with this backend (usually a thorough one)")
-    p.add_argument("--json", action="store_true", help="Print the plan as JSON on stdout (for agents and scripts)")
-    p.add_argument("--url", default="", help="Override the backend URL")
-    p.add_argument("--config", default="", help="Config file (default: $XDG_CONFIG_HOME/sortling/config.json)")
-    p.add_argument("--init-config", action="store_true", help="Write a starter config with all backends and exit")
-    p.add_argument("--show-profile", nargs="?", const="", metavar="NAME",
-                   help="Print a profile as JSON (questions, options, thresholds) and exit; no NAME shows what a run would use")
-    p.add_argument("--setup", action="store_true", help="Add, test and choose models interactively, then exit")
-    p.add_argument("--list-backends", action="store_true", help="Show configured backends and exit")
-    p.add_argument("--disable-llm", action="store_true", help="Skip all models and use filename keywords")
+
+    def advanced(text: str) -> str:
+        return text if show_all else argparse.SUPPRESS
+
+    run = p.add_argument_group("sorting")
+    run.add_argument("--root", help="Folder to sort. Without it on a terminal, the wizard asks.")
+    run.add_argument("--apply", action="store_true", help="Move the files (default: a dry run that only writes the plan)")
+    run.add_argument("--undo", metavar="MANIFEST", help="Move an applied run's files back")
+    run.add_argument("--profile", default="", help="default, photos, or one saved in your config")
+    run.add_argument("--backend", default="", help="Model to use, from --list-backends (default: your config's default)")
+    run.add_argument("--types", default=",".join(ALL_KINDS),
+                     help="Which files: pdf, image, doc (Office/text, read), file (sorted by extension). Default: all")
+    run.add_argument("--recursive-source", action="store_true", help="Also sort files in subfolders")
+
+    scripts = p.add_argument_group("for scripts and agents (see SORTLING.md)")
+    scripts.add_argument("--json", action="store_true", help="Print the plan as JSON on stdout (implies no progress output)")
+    scripts.add_argument("--profile-file", default="", metavar="JSON",
+                         help='Profile from a JSON file, or "-" for stdin: {"folders": {"name": "what goes in it", ...}}')
+    scripts.add_argument("--output-dir", default="", help="Where the manifest goes (default: <root>/_sortling)")
+
+    setup = p.add_argument_group("setup")
+    setup.add_argument("--setup", action="store_true", help="Add, test and choose models")
+    setup.add_argument("--list-backends", action="store_true", help="Show configured models")
+    setup.add_argument("--show-profile", nargs="?", const="", metavar="NAME",
+                       help="Print a profile's questions, options, thresholds and file rules as JSON")
+    setup.add_argument("--init-config", action="store_true", help="Write a starter config")
+    setup.add_argument("--version", action="version", version=f"sortling {__version__}")
+    setup.add_argument("--help-all", action="store_true", help="Show every option")
+
+    adv = p.add_argument_group("advanced") if show_all else p
+    adv.add_argument("-i", "--interactive", action="store_true", help=advanced("Force the wizard even with --root"))
+    adv.add_argument("--second-pass", default="", metavar="BACKEND",
+                     help=advanced("Hybrid: re-check uncertain files with this backend (usually a thorough one)"))
+    adv.add_argument("--url", default="", help=advanced("Override the backend URL"))
+    adv.add_argument("--config", default="", help=advanced("Config file (default: $XDG_CONFIG_HOME/sortling/config.json)"))
+    adv.add_argument("--disable-llm", action="store_true", help=advanced("Skip all models and use filename keywords"))
     # threshold flags default to None so the profile's own thresholds apply unless one is given
-    p.add_argument("--min-confidence", type=float, help="Below this, documents go to _review (default: the profile's, 0.6)")
-    p.add_argument("--screenshot-min-confidence", type=float,
-                   help="Below this topic probability, screenshots go to screenshots/other (default: the profile's, 0.3)")
-    p.add_argument("--delete-min-prob", type=float, help="Minimum junk probability for _delete (default: the profile's, 0.85)")
-    p.add_argument("--delete-exact-duplicates", action="store_true", help="Delete exact duplicates instead of moving them to _duplicates")
-    p.add_argument("--hard-delete-delete-candidates", action="store_true", help="Hard-delete junk instead of moving it to _delete")
-    p.add_argument("--timeout-s", type=int, default=120, help="Model request timeout (seconds)")
-    p.add_argument("--max-pages", type=int, default=3, help="Max PDF pages for text extraction")
-    p.add_argument("--max-chars", type=int, default=7000, help="Max text chars sent to the model")
-    p.add_argument("--vision-mode", choices=("off", "auto", "always"), default="auto",
-                   help="Send images: PDF first-page snapshots (auto: when text is missing or weak) and image files (off: never)")
-    p.add_argument("--vision-min-text-chars", type=int, default=400, help="In auto mode, snapshot PDFs with less text than this")
-    p.add_argument("--output-dir", default="", help="Manifest directory (default: <root>/_sortling)")
-    p.add_argument("--write-review-note", action="store_true", help="Update _review/REVIEW_LIST.txt")
-    p.add_argument("--no-progress", action="store_true", help="Disable progress bars and stage logs")
-    p.add_argument("--no-banner", action="store_true", help="Skip the banner in interactive mode")
-    p.add_argument("--no-face", action="store_true", help="Plain progress bar instead of the animated face (also SORTLING_FACE=0)")
-    p.add_argument("--progress-width", type=int, default=32, help="Progress bar width")
-    p.add_argument("--max-consecutive-timeouts", type=int, default=3, help="Stop using the model after this many timeouts in a row")
-    p.add_argument("--retry-timeouts", type=int, default=1, help="Per-file retries on timeouts")
-    p.add_argument("--retry-backoff-sec", type=float, default=1.2, help="Base backoff before a retry")
-    p.add_argument("--version", action="version", version=f"sortling {__version__}")
-    return p.parse_args(argv)
+    adv.add_argument("--min-confidence", type=float, help=advanced("Below this, documents go to _review (profile default 0.6)"))
+    adv.add_argument("--screenshot-min-confidence", type=float,
+                     help=advanced("Below this topic probability, screenshots go to screenshots/other (profile default 0.3)"))
+    adv.add_argument("--delete-min-prob", type=float, help=advanced("Minimum junk probability for _delete (profile default 0.85)"))
+    adv.add_argument("--delete-exact-duplicates", action="store_true",
+                     help=advanced("Really delete exact duplicates instead of moving them to _duplicates"))
+    adv.add_argument("--hard-delete-delete-candidates", action="store_true",
+                     help=advanced("Really delete junk instead of moving it to _delete"))
+    adv.add_argument("--timeout-s", type=int, default=120, help=advanced("Model request timeout in seconds"))
+    adv.add_argument("--max-pages", type=int, default=3, help=advanced("PDF pages to read text from"))
+    adv.add_argument("--max-chars", type=int, default=7000, help=advanced("Text characters sent to the model"))
+    adv.add_argument("--vision-mode", choices=("off", "auto", "always"), default="auto",
+                     help=advanced("Send images: auto (PDF page snapshots when text is weak), always, or off"))
+    adv.add_argument("--write-review-note", action="store_true", help=advanced("Write _review/REVIEW_LIST.txt"))
+    adv.add_argument("--no-progress", action="store_true", help=advanced("No progress bars or stage notes"))
+    adv.add_argument("--no-banner", action="store_true", help=advanced("Skip the wizard's banner"))
+    adv.add_argument("--no-face", action="store_true", help=advanced("Plain progress bar instead of the face (also SORTLING_FACE=0)"))
+    args = p.parse_args(argv)
+    if args.help_all:
+        p.print_help()
+        raise SystemExit(0)
+    if args.json:
+        args.no_progress = True  # stdout is the JSON; keep stderr quiet too
+    return args
 
 
 def profile_payload(profile: Profile, flags: dict) -> dict:
@@ -3318,17 +3335,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         second=second,
         thresholds=profile.thresholds(threshold_flags(args)),
         vision_mode=args.vision_mode,
-        vision_min_text_chars=args.vision_min_text_chars,
         max_pages=args.max_pages,
         max_chars=args.max_chars,
         timeout_s=args.timeout_s,
-        retry_timeouts=max(0, args.retry_timeouts),
-        retry_backoff_sec=args.retry_backoff_sec,
-        max_consecutive_timeouts=args.max_consecutive_timeouts,
         delete_exact_duplicates=args.delete_exact_duplicates,
         hard_delete=args.hard_delete_delete_candidates,
         progress=not args.no_progress,
-        progress_width=args.progress_width,
         face=not args.no_face,
     )
     precheck_backend(opts)

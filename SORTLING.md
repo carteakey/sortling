@@ -23,8 +23,8 @@ script is one Python 3.9+ file with no dependencies; no install step is needed.
 ## Run it
 
 ```bash
-python3 sortling.py --root <folder> --json --no-progress                 # plan, JSON on stdout
-python3 sortling.py --root <folder> --json --no-progress --apply         # after the user agrees
+python3 sortling.py --root <folder> --json                              # plan, JSON on stdout (no progress output)
+python3 sortling.py --root <folder> --json --apply         # after the user agrees
 python3 sortling.py --undo <manifest.json>                               # put everything back
 ```
 
@@ -50,7 +50,7 @@ description is what the model reads, so make it concrete ("receipts, invoices, b
 statements", not "money stuff"):
 
 ```bash
-cat <<'EOF' | python3 sortling.py --root ~/Downloads --profile-file - --json --no-progress
+cat <<'EOF' | python3 sortling.py --root ~/Downloads --profile-file - --json
 {
   "name": "inbox",
   "folders": {

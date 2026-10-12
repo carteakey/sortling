@@ -227,22 +227,25 @@ python3 sortling.py --root ~/Pictures/Screenshots --types image --profile my-fol
 python3 sortling.py --undo ~/Downloads/_sortling/sortling_manifest_<stamp>.json
 ```
 
-Useful flags:
+The everyday options (`--help` shows these):
 
 - `--apply`: move files (default is a dry run that only writes the manifest)
 - `--undo MANIFEST`: move an applied run's files back (deleted files can't return)
-- `--types pdf,image,doc,file` (default: all), `--recursive-source`
-- `--profile NAME`, `--profile-file JSON|-`, `--backend NAME`, `--second-pass NAME`, `--url URL`
-- `--json`: the plan as JSON on stdout
-- `--min-confidence` (0.6), `--screenshot-min-confidence` (0.3), `--delete-min-prob` (0.85):
-  override the profile's thresholds for one run
-- `--show-profile [NAME]`: print a profile's questions, options and thresholds as JSON
-- `--delete-exact-duplicates`, `--hard-delete-delete-candidates`: real deletes, off by default
-- `--disable-llm`: filename keywords only
-- `--setup`: add, test and choose models, then exit
-- `--vision-mode off|auto|always`, `--timeout-s`, `--no-progress`, `--no-banner`, `--no-face`
-- `SORTLING_MENUS=numbers`: numbered prompts instead of arrow-key menus (automatic
-  when input isn't a terminal)
+- `--profile NAME`, `--backend NAME`, `--types pdf,image,doc,file` (default: all),
+  `--recursive-source`
+- `--json`, `--profile-file JSON|-`, `--output-dir`: for scripts and agents
+- `--setup`, `--list-backends`, `--show-profile [NAME]`, `--init-config`
+
+`--help-all` lists the rest:
+- **Thresholds:** `--min-confidence` and friends. Better set in a profile.
+- **Real deletes:** `--delete-exact-duplicates`, `--hard-delete-delete-candidates`.
+  Off by default.
+- **Hybrid:** `--second-pass`.
+- **Model connection:** `--url`, `--timeout-s`, `--disable-llm`.
+- **Display:** `--no-banner`, `--no-face`, `--no-progress`.
+
+`SORTLING_MENUS=numbers` gives numbered prompts instead of arrow-key menus (automatic
+when input isn't a terminal).
 
 If a model is unreachable, rejects the key, or keeps timing out, sortling falls back to
 filename keywords and records why in `PRECHECK` and in each record's `classifier`.
