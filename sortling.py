@@ -183,7 +183,7 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
         # Unknown extensions are left where they are.
         "files": {
             "archives": [".zip", ".7z", ".rar", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".zst"],
-            "installers": [".dmg", ".pkg", ".exe", ".msi", ".deb", ".rpm", ".appimage", ".apk", ".iso", ".flatpakref"],
+            "installers": [".dmg", ".pkg", ".exe", ".msi", ".deb", ".rpm", ".appimage", ".apk", ".iso", ".img", ".flatpakref"],
             "audio": [".mp3", ".m4a", ".wav", ".flac", ".aac", ".ogg", ".opus", ".aiff"],
             "video": [".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v", ".wmv"],
             "ebooks": [".epub", ".mobi", ".azw", ".azw3", ".djvu", ".cbz", ".cbr"],
@@ -194,6 +194,9 @@ BUILTIN_PROFILE_SPECS: Dict[str, dict] = {
             "documents": [".doc", ".ppt", ".pages", ".key", ".odg"],
             "3d": [".stl", ".obj", ".3mf", ".gcode", ".step", ".stp"],
             "torrents": [".torrent"],
+            # saved web shortcuts (Windows .url, macOS .webloc). Not Linux .desktop: those are app
+            # launchers, and moving one off the Desktop breaks it
+            "links": [".url", ".webloc"],
         },
         # model answers outside the category options that mean one of them
         "category_aliases": {

@@ -156,6 +156,8 @@ for name, data in {"Installer-4.2.dmg": b"koly" + os.urandom(2000), "song.mp3": 
                    "clip.mp4": b"\x00\x00\x00\x18ftypmp42" + os.urandom(3000), "novel.epub": b"PK\x03\x04epub" + os.urandom(500),
                    "Inter.ttf": b"\x00\x01\x00\x00" + os.urandom(800), "cleanup.py": b"import os\nprint(os.listdir('.'))\n",
                    "sales.csv": b"month,revenue\n2026-08,1200\n2026-09,1350\n", "ubuntu.torrent": b"d8:announce35:udp://tracker.example:80e",
+                   "raspios.img": b"\0" * 512, "docs-link.url": b"[InternetShortcut]\r\nURL=https://example.com/docs\r\n",
+                   "recipe.webloc": b'<?xml version="1.0"?><plist version="1.0"><dict><key>URL</key><string>https://example.com/recipe</string></dict></plist>',
                    "bracket.stl": b"solid bracket\nendsolid bracket\n",
                    # left alone: an unfinished download, a hidden file, an unknown extension
                    "big.iso.crdownload": os.urandom(1000), ".DS_Store": os.urandom(100), "notes.xyz": b"whatever"}.items():

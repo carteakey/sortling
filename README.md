@@ -80,7 +80,7 @@ docs/          personal/ medical/ legal/ finance/ work/ travel/ learning/ (+ lea
 screenshots/   code/ chats/ reading/ apps/ social/ shopping/ maps/ media/ other/
 photos/        people/ places/ food/ pets/ events/ other/
 memes/         memes, forwards, good-morning and festival cards, quote images
-files/         archives/ installers/ audio/ video/ ebooks/ fonts/ code/ data/ documents/ 3d/ torrents/
+files/         archives/ installers/ audio/ video/ ebooks/ fonts/ code/ data/ documents/ 3d/ torrents/ links/
 _review/       uncertain documents only, where misfiling matters
 _delete/       junk (only at junk probability >= 0.85)
 _duplicates/   exact duplicates
