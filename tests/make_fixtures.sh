@@ -39,7 +39,7 @@ if [ ! -d "$D" ]; then
   cp "$D/IMG_20261003_receipt.jpg" "$D/IMG_20261003_receipt (2).jpg"
   # an image-only PDF, like a scan: no text layer, so sortling must render the page
   "$IM" -size 1240x1754 xc:white -font "$SANS" -fill black -pointsize 36 -annotate +80+120 'LIFELABS - LABORATORY REPORT' \
-    -pointsize 26 -annotate +80+220 $'Patient: Kartikey Chauhan    DOB: 1994-03-11\nCollected: 2026-09-14\n\nTest                 Result     Reference\nHemoglobin           148 g/L    135-175\nFerritin             42 ug/L    30-400\nVitamin D            61 nmol/L  75-250   LOW\nTSH                  1.9 mIU/L  0.3-4.2\n\nOrdering physician: Dr. A. Patel' \
+    -pointsize 26 -annotate +80+220 $'Patient: Alex Example    DOB: 1990-01-01\nCollected: 2026-09-14\n\nTest                 Result     Reference\nHemoglobin           148 g/L    135-175\nFerritin             42 ug/L    30-400\nVitamin D            61 nmol/L  75-250   LOW\nTSH                  1.9 mIU/L  0.3-4.2\n\nOrdering physician: Dr. A. Patel' \
     -density 150 "$D/scanned_lab_report.pdf"
   # a PDF with a real text layer, written by hand so no PDF library is needed
   python3 -I - "$D/cnn_lecture4_notes.pdf" <<'PY'
@@ -128,15 +128,15 @@ def office(name, parts):
             z.writestr(part, body)
 def wp(lines):  # WordprocessingML paragraphs
     return '<?xml version="1.0"?><w:document xmlns:w="w"><w:body>' + "".join(f"<w:p><w:r><w:t>{l}</w:t></w:r></w:p>" for l in lines) + "</w:body></w:document>"
-office("invoice-oct.docx", {"word/document.xml": wp(["INVOICE #4471", "Northwind Hosting Ltd.", "Bill to: K. Chauhan", "Dedicated server, October 2026: $89.00", "HST 13%: $11.57", "Total due: $100.57 by 2026-11-01"])})
+office("invoice-oct.docx", {"word/document.xml": wp(["INVOICE #4471", "Northwind Hosting Ltd.", "Bill to: A. Example", "Dedicated server, October 2026: $89.00", "HST 13%: $11.57", "Total due: $100.57 by 2026-11-01"])})
 office("lecture-07.pptx", {f"ppt/slides/slide{i}.xml": f'<p:sld xmlns:a="a" xmlns:p="p"><a:p><a:t>{t}</a:t></a:p></p:sld>' for i, t in enumerate(
     ["CS 480 Lecture 7: Attention and Transformers", "Scaled dot-product attention: softmax(QK^T / sqrt(d)) V", "Multi-head attention and positional encodings", "Reading: Vaswani et al. 2017"], start=1)})
 office("statement-sept.xlsx", {"xl/sharedStrings.xml": '<sst><si><t>Chequing account statement</t></si><si><t>September 2026</t></si><si><t>Opening balance 2,410.22</t></si><si><t>Payroll deposit 3,850.00</t></si><si><t>Rent payment -1,950.00</t></si><si><t>Closing balance 4,310.22</t></si></sst>'})
 open(os.path.join(out, "lease-agreement.rtf"), "w").write(r"{\rtf1\ansi {\b RESIDENTIAL LEASE AGREEMENT}\par This lease is made between the Landlord and the Tenant for the premises at 12 Elm St, Unit 4.\par Term: 12 months from 2026-11-01. Rent: $1,950 per month.\par Signed by both parties.\par}")
-open(os.path.join(out, "rx-notes.txt"), "w").write("Prescription\nPatient: K. Chauhan\nRx: Amoxicillin 500 mg, three times daily for 7 days\nPrescribed by Dr. A. Patel, family medicine\nRefills: 0\n")
+open(os.path.join(out, "rx-notes.txt"), "w").write("Prescription\nPatient: A. Example\nRx: Amoxicillin 500 mg, three times daily for 7 days\nPrescribed by Dr. A. Patel, family medicine\nRefills: 0\n")
 open(os.path.join(out, "lisbon-trip.md"), "w").write("# Lisbon trip itinerary\n\n- Flight TP 258 YYZ -> LIS, 14 Nov 2026, 21:40\n- Hotel: Casa do Bairro, check-in 15 Nov\n- Day 2: Belem tower, LX Factory\n- Return flight 21 Nov\n")
 # a PDF whose text is Flate-compressed, like nearly every real PDF: exercises the built-in reader
-text = ["EMPLOYMENT OFFER LETTER", "Dear Kartikey,", "We are pleased to offer you the position of Senior Data Engineer", "starting 2026-12-01 at an annual salary of $142,000.", "Please sign and return by 2026-11-15."]
+text = ["EMPLOYMENT OFFER LETTER", "Dear Alex,", "We are pleased to offer you the position of Senior Data Engineer", "starting 2026-12-01 at an annual salary of $142,000.", "Please sign and return by 2026-11-15."]
 content = zlib.compress(("BT /F1 13 Tf 60 760 Td 18 TL " + " ".join("(%s) '" % l for l in text) + " ET").encode())
 objs = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
